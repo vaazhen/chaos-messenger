@@ -9,7 +9,13 @@
     "preview": "vite preview",
     "test": "vitest run --pool=threads --poolOptions.threads.singleThread=true",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage --pool=threads --poolOptions.threads.singleThread=true"
+    "test:coverage": "vitest run --coverage --pool=threads --poolOptions.threads.singleThread=true",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:real": "playwright test -c playwright.real.config.js",
+    "test:e2e:real:headed": "playwright test -c playwright.real.config.js --headed",
+    "test:e2e:real:ui": "playwright test -c playwright.real.config.js --ui"
   },
   "dependencies": {
     "@stomp/stompjs": "^7.0.0",
@@ -19,6 +25,7 @@
   },
   "devDependencies": {
     "@fontsource/sora": "^5.0.8",
+    "@playwright/test": "^1.59.1",
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "^15.0.0",
     "@testing-library/user-event": "^14.5.0",
