@@ -1,0 +1,31 @@
+{
+    "name":  "chaos-messenger-ui",
+    "private":  true,
+    "version":  "1.0.0",
+    "type":  "module",
+    "scripts":  {
+                    "dev":  "vite",
+                    "build":  "vite build",
+                    "preview":  "vite preview",
+                    "test":  "vitest run --pool=threads --poolOptions.threads.singleThread=true",
+                    "test:watch":  "vitest"
+                },
+    "dependencies":  {
+                         "react":  "^18.3.1",
+                         "react-dom":  "^18.3.1",
+                         "@stomp/stompjs":  "^7.0.0",
+                         "sockjs-client":  "^1.6.1"
+                     },
+    "devDependencies":  {
+                            "@fontsource/sora":  "^5.0.8",
+                            "@types/react":  "^18.3.3",
+                            "@types/react-dom":  "^18.3.0",
+                            "@vitejs/plugin-react":  "^4.2.1",
+                            "vite":  "^5.0.8",
+                            "vitest":  "^1.6.0",
+                            "@testing-library/react":  "^15.0.0",
+                            "@testing-library/jest-dom":  "^6.4.0",
+                            "@testing-library/user-event":  "^14.5.0",
+                            "jsdom":  "^24.0.0"
+                        }
+}

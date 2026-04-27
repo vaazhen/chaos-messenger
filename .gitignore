@@ -1,0 +1,35 @@
+# OS / IDE
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# logs
+logs/
+*.log
+
+# backups created by scripts
+backup_*/
+backup*/
+*_backup_*/
+*.bak
+*.patch
+
+# frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# backend
+backend/target/
+backend/logs/
+backend/*.log
+
+# env / local
+.env
+.env.*
+*.local
+
+# Maven wrapper jar is usually allowed, but keep generated files out
+.mvn/timing.properties

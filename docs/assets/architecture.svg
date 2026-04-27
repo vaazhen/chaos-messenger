@@ -1,0 +1,29 @@
+<svg width="1200" height="640" viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Chaos Messenger architecture diagram">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#111827"/></linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1f2937"/><stop offset="100%" stop-color="#111827"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.35"/></filter>
+    <style>
+      .title{font:700 42px Arial,sans-serif;fill:#f8fafc}.sub{font:500 18px Arial,sans-serif;fill:#94a3b8}
+      .ct{font:700 24px Arial,sans-serif;fill:#f8fafc}.txt{font:500 16px Arial,sans-serif;fill:#cbd5e1}
+      .pill{font:700 13px Arial,sans-serif;fill:#a7f3d0}.line{stroke:#38bdf8;stroke-width:4;stroke-linecap:round;stroke-dasharray:10 12;opacity:.8}.arrow{fill:#38bdf8;opacity:.9}
+    </style>
+  </defs>
+  <rect width="1200" height="640" rx="28" fill="url(#bg)"/>
+  <text x="70" y="82" class="title">Chaos Messenger</text>
+  <text x="70" y="118" class="sub">Client-side E2EE prototype • Spring Boot realtime backend • multi-device encrypted delivery</text>
+  <rect x="70" y="170" width="270" height="170" rx="22" fill="url(#card)" stroke="#334155" filter="url(#shadow)"/>
+  <text x="105" y="220" class="ct">React Client</text><text x="105" y="260" class="txt">WebCrypto API</text><text x="105" y="288" class="txt">Encrypted envelopes</text><text x="105" y="316" class="txt">Device sessions</text>
+  <rect x="465" y="170" width="270" height="170" rx="22" fill="url(#card)" stroke="#334155" filter="url(#shadow)"/>
+  <text x="500" y="220" class="ct">Spring Boot API</text><text x="500" y="260" class="txt">JWT auth</text><text x="500" y="288" class="txt">WebSocket/STOMP</text><text x="500" y="316" class="txt">Access control</text>
+  <rect x="860" y="170" width="270" height="170" rx="22" fill="url(#card)" stroke="#334155" filter="url(#shadow)"/>
+  <text x="895" y="220" class="ct">Data Layer</text><text x="895" y="260" class="txt">PostgreSQL + Flyway</text><text x="895" y="288" class="txt">Redis presence</text><text x="895" y="316" class="txt">Rate limits</text>
+  <line x1="350" y1="255" x2="455" y2="255" class="line"/><polygon points="455,255 438,244 438,266" class="arrow"/>
+  <line x1="745" y1="255" x2="850" y2="255" class="line"/><polygon points="850,255 833,244 833,266" class="arrow"/>
+  <rect x="150" y="425" width="900" height="92" rx="24" fill="#052e2b" stroke="#0f766e"/>
+  <text x="195" y="468" class="ct">Security posture</text><text x="195" y="498" class="txt">Experimental E2EE, explicit threat model, hardened CORS, CSP, authenticated WebSocket subscriptions</text>
+  <rect x="70" y="555" width="205" height="34" rx="17" fill="#063b34" stroke="#0f766e"/><text x="94" y="578" class="pill">E2EE prototype</text>
+  <rect x="292" y="555" width="205" height="34" rx="17" fill="#082f49" stroke="#0369a1"/><text x="318" y="578" class="pill">Realtime delivery</text>
+  <rect x="515" y="555" width="205" height="34" rx="17" fill="#312e81" stroke="#4f46e5"/><text x="541" y="578" class="pill">Multi-device</text>
+  <rect x="738" y="555" width="205" height="34" rx="17" fill="#3b0764" stroke="#7e22ce"/><text x="764" y="578" class="pill">Docker-ready</text>
+</svg>

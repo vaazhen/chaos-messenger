@@ -1,0 +1,116 @@
+{
+  "id": null,
+  "uid": "chaos-1",
+  "title": "Chaos Messenger - Overview",
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 2,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Request rate",
+      "id": 1,
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(rate(http_server_requests_seconds_count[1m]))", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error rate (4xx+5xx)",
+      "id": 2,
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(rate(http_server_requests_seconds_count{status=~\\\"4..|5..\\\"}[1m]))", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Avg latency (s)",
+      "id": 3,
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "rate(http_server_requests_seconds_sum[1m]) / rate(http_server_requests_seconds_count[1m])", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM heap used (bytes)",
+      "id": 4,
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "jvm_memory_used_bytes{area=\\\"heap\\\"}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Process CPU (rate)",
+      "id": 5,
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
+      "targets": [{"expr": "rate(process_cpu_seconds_total[1m])", "refId": "A"}]
+    },
+    {
+      "type": "table",
+      "title": "Top endpoints by request rate (5m)",
+      "id": 6,
+      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "topk(10, sum by (uri) (rate(http_server_requests_seconds_count[5m])))",
+          "refId": "A"
+        }
+      ],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "table",
+      "title": "Top endpoints by avg latency (5m)",
+      "id": 7,
+      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "topk(10, (sum by (uri) (rate(http_server_requests_seconds_sum[5m])) / sum by (uri) (rate(http_server_requests_seconds_count[5m]))))",
+          "refId": "A"
+        }
+      ],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages sent (rate)",
+      "id": 8,
+      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 6},
+      "targets": [{"expr": "rate(messages_sent_total[1m])", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages delivered (rate)",
+      "id": 9,
+      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 6},
+      "targets": [{"expr": "rate(messages_delivered_total[1m])", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Messages read (rate)",
+      "id": 10,
+      "gridPos": {"x": 0, "y": 38, "w": 12, "h": 6},
+      "targets": [{"expr": "rate(messages_read_total[1m])", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Message envelopes persisted (rate)",
+      "id": 11,
+      "gridPos": {"x": 12, "y": 38, "w": 12, "h": 6},
+      "targets": [{"expr": "rate(message_envelopes_persisted_total[1m])", "refId": "A"}]
+    },
+    {
+      "type": "table",
+      "title": "Top message senders (5m)",
+      "id": 12,
+      "gridPos": {"x": 0, "y": 44, "w": 12, "h": 8},
+      "targets": [{"expr": "topk(10, sum by (sender) (rate(messages_sent_by_sender[5m])))", "refId": "A"}],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "table",
+      "title": "Top chats by messages (5m)",
+      "id": 13,
+      "gridPos": {"x": 12, "y": 44, "w": 12, "h": 8},
+      "targets": [{"expr": "topk(10, sum by (chat) (rate(messages_sent_by_chat[5m])))", "refId": "A"}],
+      "options": {"showHeader": true}
+    }
+  ]
+}

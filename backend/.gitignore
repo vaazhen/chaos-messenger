@@ -1,0 +1,33 @@
+# Maven
+target/
+*.class
+*.jar
+!**/src/main/**
+!**/src/test/**
+
+# Logs - never commit
+logs/
+*.log
+*.log.*
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Env / secrets
+.env
+*.env
+application-local.properties
+application-prod.properties
+
+# Testcontainers
+.testcontainers.properties

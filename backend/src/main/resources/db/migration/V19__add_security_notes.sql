@@ -1,0 +1,11 @@
+-- V19: Security hardening notes (no schema changes — state lives in Redis)
+--
+-- Device registration tokens:  Redis key  dev_reg_token:<uuid>  → username  TTL 60s
+-- Refresh tokens:               Redis key  refresh_token:<uuid>  → username  TTL 30d
+--
+-- These require no DB tables because:
+--   • They are short-lived (60s / 30d) → TTL-native in Redis
+--   • They are one-time-use → consumed on read (delete after get)
+--   • They do not need relational joins
+--
+-- If you need audit trails for token usage, add a token_audit table here.
