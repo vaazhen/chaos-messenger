@@ -1,5 +1,7 @@
 package ru.messenger.chaosmessenger.crypto.device;
 
+
+import ru.messenger.chaosmessenger.user.service.UserIdentityService;
 import ru.messenger.chaosmessenger.common.exception.*;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +19,7 @@ public class CurrentDeviceService {
     private final HttpServletRequest request;
     private final UserDeviceRepository userDeviceRepository;
     private final UserRepository userRepository;
+    private final UserIdentityService userIdentityService;
 
     public UserDevice requireCurrentDevice() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -32,8 +35,7 @@ public class CurrentDeviceService {
             throw new AuthException("X-Device-Id header is required");
         }
 
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AuthException("User not found"));
+        User user = userIdentityService.require(username);
 
         return userDeviceRepository.findByUserIdAndDeviceIdAndActiveTrue(user.getId(), deviceId)
                 .orElseThrow(() -> new AuthException("Active device not found for current user"));

@@ -155,7 +155,17 @@ export default function ProfileModal({
   const [error, setError] = useState("");
   const [avatarError, setAvatarError] = useState("");
 
-  const [devices, setDevices] = useState([]);
+  
+  // profile-sync-form-from-me
+  useEffect(() => {
+    setForm({
+      firstName: me?.firstName || "",
+      lastName: me?.lastName || "",
+      username: me?.username || "",
+      avatarUrl: me?.avatarUrl || "",
+    });
+  }, [me?.id, me?.username, me?.firstName, me?.lastName, me?.avatarUrl]);
+const [devices, setDevices] = useState([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState("");
   const [deactivatingId, setDeactivatingId] = useState(null);
@@ -226,6 +236,10 @@ export default function ProfileModal({
       };
 
       const updated = await api.updateProfile(payload);
+      // profile-save-new-token
+      if (updated?.token) {
+        localStorage.setItem("cm_token", updated.token);
+      }
       onSaved?.(updated);
     } catch (e) {
       setError(e?.message || "Не удалось сохранить профиль");
@@ -419,12 +433,15 @@ export default function ProfileModal({
                 <label className="profile-field">
                   <span>Username</span>
                   <input
-                    value={me?.username || form.username}
-                    readOnly
+                    value={form.username}
+                    onChange={e => setField("username", e.target.value)}
                     placeholder="username"
-                    title="Смена username будет добавлена отдельным безопасным патчем"
+                    autoComplete="off"
+                    title="3-32 символа: латиница, цифры и underscore"
                   />
-                  <small className="profile-field-note">Username пока нельзя менять: текущая авторизация привязана к нему.</small>
+                  <small className="profile-field-note">
+                    Username можно изменить. После сохранения авторизация обновится автоматически.
+                  </small>
                 </label>
               </div>
 

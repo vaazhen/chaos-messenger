@@ -1,5 +1,7 @@
 package ru.messenger.chaosmessenger.crypto.device;
 
+
+import ru.messenger.chaosmessenger.user.service.UserIdentityService;
 import ru.messenger.chaosmessenger.common.exception.*;
 
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ import java.util.Optional;
 public class DeviceService {
 
     private final UserRepository userRepository;
+    private final UserIdentityService userIdentityService;
     private final UserDeviceRepository userDeviceRepository;
     private final SignedPreKeyRepository signedPreKeyRepository;
     private final OneTimePreKeyRepository oneTimePreKeyRepository;
@@ -62,8 +65,7 @@ public class DeviceService {
             throw new IllegalArgumentException("signedPreKey is required");
         }
 
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        User user = userIdentityService.require(username);
 
         Optional<UserDevice> existingDevice = userDeviceRepository
                 .findByUserUsernameAndDeviceId(username, request.getDeviceId());
@@ -102,8 +104,7 @@ public class DeviceService {
 
     @Transactional(readOnly = true)
     public java.util.List<UserDeviceResponse> listMyDevices(String username, String currentDeviceId) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AuthException("User not found"));
+        User user = userIdentityService.require(username);
 
         return userDeviceRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
                 .sorted((a, b) -> {
@@ -143,8 +144,7 @@ public class DeviceService {
             boolean confirmLastDevice,
             String currentDeviceId
     ) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AuthException("User not found"));
+        User user = userIdentityService.require(username);
 
         UserDevice device = userDeviceRepository.findByIdAndUserId(internalDeviceId, user.getId())
                 .orElseThrow(() -> new AuthException("Device not found"));

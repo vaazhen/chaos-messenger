@@ -1,10 +1,5 @@
 import { getToken, API_BASE } from "./api";
 
-/**
- * Generates UUID v4.
- * Uses crypto.randomUUID() when available (localhost / HTTPS).
- * Fallback uses crypto.getRandomValues() for non-secure contexts.
- */
 function generateUUID() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -15,39 +10,31 @@ function generateUUID() {
   });
 }
 
+// Storage key — NOT scoped by username (device identity is independent of user account)
+const DEVICE_ID_KEY = "cm_device_id";
+
 /**
  * Returns deviceId from window.e2ee (crypto-engine.js).
- * Fallback generates UUID with the same storage key format.
+ * Fallback generates UUID with the unscoped storage key.
  */
 export function getOrCreateDeviceId() {
   if (window.e2ee?.getOrCreateDeviceId) {
     return window.e2ee.getOrCreateDeviceId();
   }
-  const token = getToken();
-  let username = "anonymous";
-  try {
-    if (token) {
-      username =
-          JSON.parse(
-              atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
-          )?.sub || "anonymous";
-    }
-  } catch (_) {}
-  const key = `cm_device_id:${username}`;
-  let id = localStorage.getItem(key);
+  // Fallback (crypto-engine.js not loaded yet)
+  let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
     id = "device-" + generateUUID();
-    localStorage.setItem(key, id);
+    localStorage.setItem(DEVICE_ID_KEY, id);
   }
   return id;
 }
 
 /**
  * Registers the device through crypto-engine.js.
- * Called right after OTP verify-code.
+ * Called right after OTP verify-code or complete-setup.
  *
  * @param {string} deviceRegistrationToken — short-lived token (60 s) from verify-code.
- *   When omitted, the legacy JWT fallback is used for compatibility only.
  */
 export async function ensureDeviceRegistered(deviceRegistrationToken) {
   if (!window.e2ee?.ensureDeviceRegistered) {
@@ -60,7 +47,6 @@ export async function ensureDeviceRegistered(deviceRegistrationToken) {
 
   const apiFn = async (path, opts = {}) => {
     const extraHeaders = {};
-    // Pass the device registration token to the /register endpoint
     if (deviceRegistrationToken && path.includes("/crypto/devices/register")) {
       extraHeaders["X-Device-Registration-Token"] = deviceRegistrationToken;
     }
@@ -90,15 +76,10 @@ export async function ensureDeviceRegistered(deviceRegistrationToken) {
 /**
  * Checks that the current local device is already registered on the backend.
  * Used only during session restore / page reload.
- *
- * Important: this must NOT call /api/crypto/devices/register, because reload
- * flow does not have X-Device-Registration-Token anymore.
  */
 export async function ensureCurrentDeviceExists() {
   const token = getToken();
-  if (!token) {
-    throw new Error("Missing JWT token");
-  }
+  if (!token) throw new Error("Missing JWT token");
 
   const deviceId = getOrCreateDeviceId();
   const r = await fetch(`${API_BASE}/crypto/devices/current`, {

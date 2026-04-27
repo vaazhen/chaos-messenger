@@ -15,6 +15,7 @@ import java.util.NoSuchElementException;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final UserIdentityService userIdentityService;
 
     public UserSummaryResponse findByUsername(String username) {
         var user = userRepository.findByUsername(username)
@@ -22,9 +23,8 @@ public class UserService {
         return new UserSummaryResponse(user.getId(), user.getUsername());
     }
 
-    public CurrentUserResponse getCurrentUser(String username) {
-        var user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new NoSuchElementException("User not found"));
+    public CurrentUserResponse getCurrentUser(String identity) {
+        var user = userIdentityService.require(identity);
         return new CurrentUserResponse(
                 user.getId(),
                 user.getUsername(),
@@ -36,9 +36,8 @@ public class UserService {
         );
     }
 
-    public UserProfileResponse getProfile(String username) {
-        var user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new NoSuchElementException("User not found: " + username));
+    public UserProfileResponse getProfile(String identity) {
+        var user = userIdentityService.require(identity);
         return new UserProfileResponse(
                 user.getId(),
                 user.getUsername(),
@@ -49,25 +48,34 @@ public class UserService {
         );
     }
 
-    public UserProfileResponse updateProfile(String currentUsername, UpdateProfileRequest request) {
-        var user = userRepository.findByUsername(currentUsername)
-                .orElseThrow(() -> new NoSuchElementException("User not found: " + currentUsername));
+    public UserProfileResponse updateProfile(String currentIdentity, UpdateProfileRequest request) {
+        var user = userIdentityService.require(currentIdentity);
 
-        // Update display name fields
-        if (request.getFirstName() != null) user.setFirstName(request.getFirstName());
-        if (request.getLastName() != null) user.setLastName(request.getLastName());
-        if (request.getAvatarUrl() != null) user.setAvatarUrl(request.getAvatarUrl());
+        if (request.getFirstName() != null) {
+            user.setFirstName(request.getFirstName().trim());
+        }
 
-        // Update username if provided and not already taken
+        if (request.getLastName() != null) {
+            user.setLastName(request.getLastName().trim());
+        }
+
+        if (request.getAvatarUrl() != null) {
+            user.setAvatarUrl(request.getAvatarUrl().trim());
+        }
+
         if (request.getUsername() != null && !request.getUsername().isBlank()) {
             String newUsername = request.getUsername().trim().toLowerCase();
 
-            // Username unchanged — skip
-            if (!newUsername.equals(user.getUsername())) {
+            if (!newUsername.matches("^[a-z0-9_]{3,32}$")) {
+                throw new IllegalArgumentException("Username must be 3-32 chars: a-z, 0-9, underscore");
+            }
+
+            if (!newUsername.equalsIgnoreCase(user.getUsername())) {
                 boolean taken = userRepository.existsByUsername(newUsername);
                 if (taken) {
                     throw new IllegalArgumentException("Username \"" + newUsername + "\" is already taken");
                 }
+
                 user.setUsername(newUsername);
             }
         }

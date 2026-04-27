@@ -1,5 +1,7 @@
 package ru.messenger.chaosmessenger.message.service;
 
+
+import ru.messenger.chaosmessenger.user.service.UserIdentityService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.AllArgsConstructor;
@@ -56,6 +58,7 @@ public class MessageService {
     private final MessageReactionRepository messageReactionRepository;
     private final ChatParticipantRepository participantRepository;
     private final UserRepository userRepository;
+    private final UserIdentityService userIdentityService;
     private final UserDeviceRepository userDeviceRepository;
     private final CurrentDeviceService currentDeviceService;
     private final UnreadService unreadService;
@@ -659,8 +662,7 @@ public class MessageService {
     }
 
     private User requireUser(String username) {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new AuthException("User not found"));
+        return userIdentityService.require(username);
     }
 
     private void requireParticipant(Long chatId, Long userId) {

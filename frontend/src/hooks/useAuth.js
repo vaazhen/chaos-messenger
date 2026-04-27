@@ -3,15 +3,17 @@ import { api, setToken, clearToken, getToken } from "../api";
 import { ensureDeviceRegistered, ensureCurrentDeviceExists } from "../deviceId";
 
 export function useAuth() {
-  const [screen, setScreen]           = useState("loading");
-  const [phone, setPhone]             = useState("");
-  const [dialCode, setDialCode]       = useState("+7");
-  const [otp, setOtp]                 = useState(["","","","","",""]);
-  const [email, setEmail]             = useState("");
-  const [password, setPassword]       = useState("");
-  const [authError, setAuthError]     = useState(null);
+  const [screen,      setScreen]      = useState("loading");
+  const [phone,       setPhone]       = useState("");
+  const [dialCode,    setDialCode]    = useState("+7");
+  const [otp,         setOtp]         = useState(["","","","","",""]);
+  const [email,       setEmail]       = useState("");
+  const [password,    setPassword]    = useState("");
+  const [authError,   setAuthError]   = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [me, setMe]                   = useState(null);
+  const [me,          setMe]          = useState(null);
+  // setupToken is held in memory only — it lives for the duration of the setup screen
+  const [setupToken,  setSetupToken]  = useState(null);
 
   const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
 
@@ -35,12 +37,8 @@ export function useAuth() {
   }, []);
 
   const tryRefresh = useCallback(async () => {
-    try {
-      return !!(await refreshSession());
-    } catch (_) {
-      clearRefreshToken();
-      return false;
-    }
+    try { return !!(await refreshSession()); }
+    catch (_) { clearRefreshToken(); return false; }
   }, [refreshSession]);
 
   const ensureDeviceOrRecover = useCallback(async () => {
@@ -63,16 +61,14 @@ export function useAuth() {
       const meData = await api.getMe();
       setMe(meData);
       await ensureDeviceOrRecover();
-      if (!isProfileComplete(meData)) {
-        setScreen("setup");
-        return;
-      }
+      if (!isProfileComplete(meData)) { setScreen("setup"); return; }
       onRestored(meData);
     } catch {
       clearToken(); clearRefreshToken(); setScreen("auth");
     }
   }, [tryRefresh, ensureDeviceOrRecover]);
 
+  /** Called after a successful OTP / email login — sets JWT and registers device. */
   const completeTokenLogin = useCallback(async (res, onSuccess) => {
     setToken(res.token);
     saveRefreshToken(res.refreshToken);
@@ -90,9 +86,7 @@ export function useAuth() {
       await api.sendPhone(buildFullPhone(currentDialCode || dialCode, currentPhone || phone));
       setScreen("otp");
       setTimeout(() => otpRefs[0].current?.focus(), 100);
-    } catch (e) {
-      setAuthError("Failed to send code: " + e.message);
-    }
+    } catch (e) { setAuthError("Failed to send code: " + e.message); }
     setAuthLoading(false);
   }, [phone, dialCode, otpRefs]);
 
@@ -104,7 +98,13 @@ export function useAuth() {
         digits.join("")
       );
       if (res?.token) {
+        // Existing user — full login
         await completeTokenLogin(res, onSuccess);
+      } else if (res?.setupToken) {
+        // New user — two-phase registration: store setup token and show profile setup
+        setSetupToken(res.setupToken);
+        setMe({ phone: buildFullPhone(currentDialCode || dialCode, currentPhone || phone) });
+        onSuccess({ phone: buildFullPhone(currentDialCode || dialCode, currentPhone || phone) }, true);
       } else {
         setAuthError("Invalid code");
         setOtp(["","","","","",""]);
@@ -117,11 +117,28 @@ export function useAuth() {
     setAuthLoading(false);
   }, [phone, dialCode, otpRefs, completeTokenLogin]);
 
+  /**
+   * Called from SetupProfile when a setupToken is present.
+   * Calls /auth/complete-setup, then does full device registration.
+   */
+  const finishSetup = useCallback(async (profileData, onSuccess) => {
+    if (!setupToken) return;
+    setAuthLoading(true); setAuthError(null);
+    try {
+      const res = await api.completeSetup(setupToken, profileData);
+      if (!res?.token) throw new Error("Server did not return a token");
+      setSetupToken(null);
+      await completeTokenLogin(res, onSuccess);
+    } catch (err) {
+      setAuthError(err.message || "Failed to complete setup");
+    }
+    setAuthLoading(false);
+  }, [setupToken, completeTokenLogin]);
+
   const submitEmail = useCallback(async (mode, onSuccess, currentEmail, currentPassword) => {
-    const e = (currentEmail ?? email).trim().toLowerCase();
+    const e = (currentEmail  ?? email).trim().toLowerCase();
     const p = currentPassword ?? password;
     if (!e || !p) return;
-
     setAuthLoading(true); setAuthError(null);
     try {
       const res = mode === "register"
@@ -138,8 +155,7 @@ export function useAuth() {
   const logout = useCallback(async () => {
     const rt = loadRefreshToken();
     if (rt) { try { await api.logout(rt); } catch (_) {} }
-    clearToken(); clearRefreshToken(); setMe(null); setScreen("auth");
-
+    clearToken(); clearRefreshToken(); setMe(null); setSetupToken(null); setScreen("auth");
     if (typeof window !== "undefined" && window.location?.reload) {
       window.location.reload();
     }
@@ -156,8 +172,10 @@ export function useAuth() {
     authError, setAuthError,
     authLoading,
     me, setMe,
+    setupToken,
     submitPhone,
     verifyOtp,
+    finishSetup,
     submitEmail,
     logout,
     restoreSession,

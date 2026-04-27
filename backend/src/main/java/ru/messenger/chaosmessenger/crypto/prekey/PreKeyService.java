@@ -1,5 +1,7 @@
 package ru.messenger.chaosmessenger.crypto.prekey;
 
+
+import ru.messenger.chaosmessenger.user.service.UserIdentityService;
 import ru.messenger.chaosmessenger.common.exception.*;
 
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import java.util.Set;
 public class PreKeyService {
 
     private final UserRepository userRepository;
+    private final UserIdentityService userIdentityService;
     private final UserDeviceRepository userDeviceRepository;
     private final SignedPreKeyRepository signedPreKeyRepository;
     private final OneTimePreKeyRepository oneTimePreKeyRepository;
@@ -42,8 +45,7 @@ public class PreKeyService {
 
     @Transactional
     public ResolvedChatDevicesResponse resolveChatDevices(String username, Long chatId) {
-        User currentUser = userRepository.findByUsername(username)
-                .orElseThrow(() -> new AuthException("User not found"));
+        User currentUser = userIdentityService.require(username);
 
         UserDevice currentDevice = currentDeviceService.requireCurrentDevice();
 
