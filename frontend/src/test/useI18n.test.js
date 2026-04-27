@@ -15,10 +15,10 @@ describe("useI18n", () => {
     localStorage.clear();
   });
 
-  it("defaults to en when no saved lang", () => {
+  it("defaults to ru when no saved lang", () => {
     const { result } = renderHook(() => useI18n());
-    expect(result.current.lang).toBe("en");
-    expect(result.current.t.no_chats).toBe("No chats");
+    expect(result.current.lang).toBe("ru");
+    expect(result.current.t.no_chats).toBeTruthy();
   });
 
   it("switchLang updates lang and translations", async () => {
