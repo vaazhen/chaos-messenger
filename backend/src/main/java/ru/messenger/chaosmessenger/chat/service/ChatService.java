@@ -85,9 +85,15 @@ public class ChatService {
         User user = userRepository.findByUsername(currentUsername)
                 .orElseThrow(() -> new ChatException("Current user not found"));
 
-        java.util.Optional<Long> existing = participantRepository.findSavedChatId(user.getId());
+        Optional<Long> existing = participantRepository.findSavedChatId(user.getId());
         if (existing.isPresent()) {
-            return existing.get();
+            Long chatId = existing.get();
+            String username = user.getUsername();
+
+            TransactionUtils.afterCommit(() ->
+                    notifyChatListUpdated(username, chatId, "saved_chat_exists"));
+
+            return chatId;
         }
 
         Chat chat = new Chat();
@@ -98,8 +104,15 @@ public class ChatService {
 
         participantRepository.save(new ChatParticipant(chat.getId(), user.getId()));
 
-        return chat.getId();
+        Long chatId = chat.getId();
+        String username = user.getUsername();
+
+        TransactionUtils.afterCommit(() ->
+                notifyChatListUpdated(username, chatId, "saved_chat_created"));
+
+        return chatId;
     }
+
     @Transactional
     public Long createGroupChat(String currentUsername, String name, List<Long> memberIds) {
         if (name == null || name.isBlank())           throw new ChatException("Group name is required");
@@ -173,7 +186,18 @@ public class ChatService {
             LocalDateTime lastAt        = lastMsg.map(Message::getCreatedAt).orElse(null);
             Long          lastSenderId  = lastMsg.map(Message::getSenderId).orElse(null);
             long          unread       = unreadService.get(currentUser.getId(), chat.getId());
+            boolean       isSaved     = "SAVED".equals(chat.getType());
             boolean       isGroup      = "GROUP".equals(chat.getType());
+
+            if (isSaved) {
+                return new ChatResponse(
+                        chat.getId(), chat.getType(), "Избранное",
+                        lastContent, lastMessageId, lastAt, lastSenderId,
+                        participants.stream().map(ChatParticipant::getUserId).toList(),
+                        null, null, null, null, null,
+                        unread, false, null
+                );
+            }
 
             if (isGroup) {
                 return new ChatResponse(

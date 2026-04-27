@@ -29,7 +29,7 @@ public class ChatController {
         return Map.of("chatId", chatService.createDirectChat(auth.getName(), targetUserId));
     }
 
-    @Operation(summary = "List my chats (direct and group)")
+    @Operation(summary = "Create or open saved messages chat")
 
     @PostMapping("/saved")
     public Map<String, Object> createSaved(Authentication auth) {
