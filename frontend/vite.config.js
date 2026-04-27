@@ -7,9 +7,9 @@ export default defineConfig({
     global: "globalThis",
   },
   server: {
-    host: true,        // listen on 0.0.0.0 → exposes Network URL
+    host: true,
     port: 5173,
-    strictPort: false, // bump to next free port if 5173 is busy
+    strictPort: false,
   },
   preview: {
     host: true,
@@ -19,5 +19,22 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.js"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "json-summary"],
+      reportsDirectory: "./coverage",
+      include: ["src/**/*.{js,jsx}"],
+      exclude: [
+        "src/main.jsx",
+        "src/styles.js",
+        "src/test/**",
+      ],
+      thresholds: {
+        statements: 65,
+        lines: 65,
+        branches: 55,
+        functions: 45,
+      },
+    },
   },
 });
