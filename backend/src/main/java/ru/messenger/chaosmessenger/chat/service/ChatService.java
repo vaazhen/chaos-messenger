@@ -203,7 +203,31 @@ public class ChatService {
                     otherUser != null ? otherUser.getAvatarUrl() : null,
                     unread, online, lastSeen
             );
-        }).collect(Collectors.toList());
+        })
+        // sort chats by last activity: active conversations first, empty chats at the bottom
+        .sorted((a, b) -> {
+            LocalDateTime aTime = a.getLastMessageAt();
+            LocalDateTime bTime = b.getLastMessageAt();
+
+            if (aTime == null && bTime == null) {
+                return Long.compare(
+                        b.getChatId() == null ? 0L : b.getChatId(),
+                        a.getChatId() == null ? 0L : a.getChatId()
+                );
+            }
+
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+
+            int byTime = bTime.compareTo(aTime);
+            if (byTime != 0) return byTime;
+
+            return Long.compare(
+                    b.getChatId() == null ? 0L : b.getChatId(),
+                    a.getChatId() == null ? 0L : a.getChatId()
+            );
+        })
+        .collect(Collectors.toList());
     }
 
     // ── private ──────────────────────────────────────────────────────────────────

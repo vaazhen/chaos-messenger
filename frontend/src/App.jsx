@@ -534,7 +534,7 @@ export default function ChaosMessenger() {
           lang={lang}
           theme={theme}
           onClose={() => setShowНастройки(false)}
-          onСохранитьd={(u) => {
+          onSaved={(u) => {
             auth.setMe(u);
             setShowНастройки(false);
             chatStore.loadChats(u?.id || auth.me?.id);
