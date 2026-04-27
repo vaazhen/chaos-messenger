@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import Ava from "./Ava";
-import { initials, avatarPreset } from "../helpers";
 
 const FILTERS = [
   { key: "all",    label: "Все" },
@@ -42,7 +41,6 @@ export default function ChatList({
   const [searchFocused, setПоискFocused] = useState(false);
 
   const myName = [me?.firstName, me?.lastName].filter(Boolean).join(" ") || me?.username || "Я";
-  const myPreset = avatarPreset(me?.avatarUrl);
 
   const filtered = useMemo(() => {
     const q = String(search || "").trim().toLowerCase();
@@ -94,9 +92,7 @@ export default function ChatList({
           }}
           title="Настройки"
         >
-          <span className="avatar-face" style={{ background: myPreset?.bg || undefined }}>
-            {myPreset?.emoji || initials(myName)}
-          </span>
+          <Ava user={me} name={myName} className="avatar-face" />
         </button>
 
         <div className="screen-title">Чаты</div>

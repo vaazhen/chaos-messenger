@@ -2,6 +2,55 @@ import { useState, useEffect } from "react";
 import { api, setToken } from "../api";
 import { AVATAR_PRESETS, initials } from "../helpers";
 
+
+function resizeAvatarFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type?.startsWith("image/")) {
+      reject(new Error("Выберите изображение"));
+      return;
+    }
+
+    if (file.size > 7 * 1024 * 1024) {
+      reject(new Error("Файл слишком большой. Выберите изображение до 7 МБ."));
+      return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      try {
+        const size = 512;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas недоступен");
+
+        const minSide = Math.min(img.width, img.height);
+        const sx = Math.floor((img.width - minSide) / 2);
+        const sy = Math.floor((img.height - minSide) / 2);
+
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.88);
+        URL.revokeObjectURL(url);
+        resolve(dataUrl);
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Не удалось прочитать изображение"));
+    };
+
+    img.src = url;
+  });
+}
 export default function SetupProfile({ me, onDone }) {
   const [step, setStep] = useState(1); // 1 = avatar, 2 = info
   const [selectedAvatar, setSelectedAvatar] = useState(null);
@@ -86,26 +135,34 @@ export default function SetupProfile({ me, onDone }) {
         <h1 className="auth-title">Choose an avatar</h1>
         <p className="auth-sub" style={{ marginBottom: 20 }}>You can change it later in profile</p>
 
-        <div className="avatar-grid">
-          {AVATAR_PRESETS.map((preset, i) => (
-            <button
-              key={i}
-              className={`avatar-opt${selectedAvatar === i ? " sel" : ""}`}
-              style={{ background: preset.bg }}
-              onClick={() => setSelectedAvatar(i)}
-            >
-              {preset.emoji}
-            </button>
-          ))}
-          {/* Initials as an option */}
-          <button
-            className={`avatar-opt${selectedAvatar === null ? " sel" : ""}`}
-            style={{ background: "linear-gradient(135deg,#4fa3e0,#2d6fa8)", fontSize: 18, fontWeight: 700 }}
-            onClick={() => setSelectedAvatar(null)}
-          >
-            {initials(firstName || me?.username || "?")}
-          </button>
-        </div>
+        <div className="btn-row" style={{ marginTop: 12 }}>
+                  <label
+                    className="btn-pri"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    Загрузить фото
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      hidden
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    className="btn-sec"
+                    onClick={() => setForm(prev => ({ ...prev, avatarUrl: "" }))}
+                  >
+                    Без фото
+                  </button>
+                </div>
 
         <button className="btn-primary" onClick={() => setStep(2)}>
           Next →
