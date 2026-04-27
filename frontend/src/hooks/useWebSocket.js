@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { WS_URL } from "../config";
-import { getToken } from "../api";
+import { getToken, getCurrentDeviceId } from "../api";
 import { getOrCreateDeviceId } from "../deviceId";
 
 export default function useWebSocket({

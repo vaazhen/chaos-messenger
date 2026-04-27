@@ -22,7 +22,7 @@ function safeUUID() {
   });
 }
 
-function getCurrentDeviceId() {
+export function getCurrentDeviceId() {
   if (window.e2ee?.getOrCreateDeviceId) {
     return window.e2ee.getOrCreateDeviceId();
   }
@@ -84,6 +84,9 @@ export const api = {
   getMe:           ()                => call("/users/me"),
   getProfile:      ()                => call("/users/profile"),
   updateProfile:   (data)            => call("/users/profile", { method: "PUT", body: JSON.stringify(data) }),
+
+  listDevices:     ()                => call("/crypto/devices/my"),
+  deactivateDevice:(id, confirmLastDevice = false) => call(`/crypto/devices/${id}/deactivate?confirmLastDevice=${Boolean(confirmLastDevice)}`, { method: "POST" }),
   searchUsers:     (q)               => call(`/users/search?q=${encodeURIComponent(q)}`),
 
   getChats:        ()                => call("/chats/my"),

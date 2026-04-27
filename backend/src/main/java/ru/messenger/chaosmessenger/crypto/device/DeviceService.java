@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.messenger.chaosmessenger.crypto.dto.DeviceRegistrationRequest;
 import ru.messenger.chaosmessenger.crypto.dto.DeviceRegistrationResponse;
+import ru.messenger.chaosmessenger.crypto.dto.UserDeviceResponse;
 import ru.messenger.chaosmessenger.crypto.prekey.OneTimePreKey;
 import ru.messenger.chaosmessenger.crypto.prekey.OneTimePreKeyRepository;
 import ru.messenger.chaosmessenger.crypto.prekey.SignedPreKey;
@@ -98,6 +99,84 @@ public class DeviceService {
                 .build();
     }
 
+
+    @Transactional(readOnly = true)
+    public java.util.List<UserDeviceResponse> listMyDevices(String username, String currentDeviceId) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AuthException("User not found"));
+
+        return userDeviceRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .sorted((a, b) -> {
+                    if (a.isActive() != b.isActive()) {
+                        return Boolean.compare(b.isActive(), a.isActive());
+                    }
+
+                    LocalDateTime aTime = a.getLastSeen() != null ? a.getLastSeen() : a.getCreatedAt();
+                    LocalDateTime bTime = b.getLastSeen() != null ? b.getLastSeen() : b.getCreatedAt();
+
+                    if (aTime == null && bTime == null) {
+                        return Long.compare(
+                                b.getId() == null ? 0L : b.getId(),
+                                a.getId() == null ? 0L : a.getId()
+                        );
+                    }
+
+                    if (aTime == null) return 1;
+                    if (bTime == null) return -1;
+
+                    int byTime = bTime.compareTo(aTime);
+                    if (byTime != 0) return byTime;
+
+                    return Long.compare(
+                            b.getId() == null ? 0L : b.getId(),
+                            a.getId() == null ? 0L : a.getId()
+                    );
+                })
+                .map(device -> toResponse(device, currentDeviceId))
+                .toList();
+    }
+
+    @Transactional
+    public UserDeviceResponse deactivateDevice(
+            String username,
+            Long internalDeviceId,
+            boolean confirmLastDevice,
+            String currentDeviceId
+    ) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AuthException("User not found"));
+
+        UserDevice device = userDeviceRepository.findByIdAndUserId(internalDeviceId, user.getId())
+                .orElseThrow(() -> new AuthException("Device not found"));
+
+        if (!device.isActive()) {
+            return toResponse(device, currentDeviceId);
+        }
+
+        long activeCount = userDeviceRepository.countByUserIdAndActiveTrue(user.getId());
+
+        if (activeCount <= 1 && !confirmLastDevice) {
+            throw new AuthException("Cannot deactivate the last active device without confirmation");
+        }
+
+        device.setActive(false);
+        device.setLastSeen(LocalDateTime.now());
+
+        UserDevice saved = userDeviceRepository.save(device);
+        return toResponse(saved, currentDeviceId);
+    }
+
+    private UserDeviceResponse toResponse(UserDevice device, String currentDeviceId) {
+        return new UserDeviceResponse(
+                device.getId(),
+                device.getDeviceId(),
+                device.getDeviceName(),
+                device.isActive(),
+                currentDeviceId != null && currentDeviceId.equals(device.getDeviceId()),
+                device.getLastSeen(),
+                device.getCreatedAt()
+        );
+    }
     private void upsertSignedPreKey(UserDevice device, DeviceRegistrationRequest request) {
         Integer preKeyId  = request.getSignedPreKey().getPreKeyId();
         String publicKey  = request.getSignedPreKey().getPublicKey();

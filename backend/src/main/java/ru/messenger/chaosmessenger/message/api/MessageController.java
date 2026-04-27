@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import ru.messenger.chaosmessenger.crypto.device.CurrentDeviceService;
 import ru.messenger.chaosmessenger.crypto.dto.EncryptedEditMessageRequestV2;
 import ru.messenger.chaosmessenger.crypto.dto.EncryptedSendMessageRequestV2;
 import ru.messenger.chaosmessenger.message.dto.DeviceMessageEventResponse;
@@ -22,11 +23,13 @@ import java.util.Map;
 public class MessageController {
 
     private final MessageService messageService;
+    private final CurrentDeviceService currentDeviceService;
 
     @PostMapping("/encrypted/v2")
     public DeviceMessageEventResponse sendEncryptedMessage(
             @Valid @RequestBody EncryptedSendMessageRequestV2 request,
             Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         return messageService.sendEncryptedMessageV2(authentication.getName(), request);
     }
 
@@ -36,21 +39,25 @@ public class MessageController {
             @RequestParam(required = false) Long beforeMessageId,
             @RequestParam(defaultValue = "50") int limit,
             Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         return messageService.getChatTimeline(authentication.getName(), chatId, beforeMessageId, limit);
     }
 
     @PostMapping("/chat/{chatId}/read")
     public void markChatRead(@PathVariable Long chatId, Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         messageService.markChatAsRead(authentication.getName(), chatId);
     }
 
     @PostMapping("/chat/{chatId}/delivered")
     public void markChatDelivered(@PathVariable Long chatId, Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         messageService.markChatAsDelivered(authentication.getName(), chatId);
     }
 
     @PostMapping("/status")
     public void updateStatus(@Valid @RequestBody UpdateMessageStatusRequest request, Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         messageService.updateMessageStatus(authentication.getName(), request.getMessageId(), request.getStatus());
     }
 
@@ -59,6 +66,7 @@ public class MessageController {
             @PathVariable Long messageId,
             @Valid @RequestBody EncryptedEditMessageRequestV2 request,
             Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         return messageService.editEncryptedMessageV2(authentication.getName(), messageId, request);
     }
 
@@ -67,11 +75,13 @@ public class MessageController {
             @PathVariable Long messageId,
             @Valid @RequestBody ReactionRequest request,
             Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         return messageService.toggleReaction(authentication.getName(), messageId, request.getEmoji());
     }
 
     @DeleteMapping("/{messageId}")
     public Map<String, Object> deleteMessage(@PathVariable Long messageId, Authentication authentication) {
+        currentDeviceService.requireCurrentDevice();
         messageService.deleteMessage(authentication.getName(), messageId);
         return Map.of("success", true);
     }

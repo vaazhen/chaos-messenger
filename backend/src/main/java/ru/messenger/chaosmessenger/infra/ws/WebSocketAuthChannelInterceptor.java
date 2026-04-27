@@ -9,12 +9,14 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
 import ru.messenger.chaosmessenger.chat.repository.ChatParticipantRepository;
+import ru.messenger.chaosmessenger.crypto.device.UserDevice;
 import ru.messenger.chaosmessenger.crypto.device.UserDeviceRepository;
 import ru.messenger.chaosmessenger.infra.security.JwtService;
 import ru.messenger.chaosmessenger.user.domain.User;
 import ru.messenger.chaosmessenger.user.repository.UserRepository;
 
 import java.security.Principal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,6 +31,7 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
     private final ChatParticipantRepository participantRepository;
 
     private final ConcurrentHashMap<String, String> sessionUserMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> sessionDeviceMap = new ConcurrentHashMap<>();
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -45,6 +48,7 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
         if (StompCommand.DISCONNECT.equals(accessor.getCommand())) {
             String sessionId = accessor.getSessionId();
             sessionUserMap.remove(sessionId);
+            sessionDeviceMap.remove(sessionId);
             log.info("WebSocket DISCONNECT sessionId={}", sessionId);
         }
 
@@ -58,6 +62,12 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
             return null;
         }
 
+        String deviceId = accessor.getFirstNativeHeader("X-Device-Id");
+        if (deviceId == null || deviceId.isBlank()) {
+            log.warn("WebSocket CONNECT denied: missing X-Device-Id");
+            return null;
+        }
+
         try {
             String username = jwtService.extractUsername(token);
             if (!jwtService.isTokenValid(token, username)) {
@@ -65,12 +75,29 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
                 return null;
             }
 
+            UserDevice device = userDeviceRepository
+                    .findByUserUsernameAndDeviceIdAndActiveTrue(username, deviceId)
+                    .orElse(null);
+
+            if (device == null) {
+                log.warn("WebSocket CONNECT denied: inactive or unknown device user={} deviceId={}", username, deviceId);
+                return null;
+            }
+
+            device.setLastSeen(LocalDateTime.now());
+            userDeviceRepository.save(device);
+
             String sessionId = accessor.getSessionId();
             Principal userPrincipal = () -> username;
+
             sessionUserMap.put(sessionId, username);
+            sessionDeviceMap.put(sessionId, deviceId);
+
             accessor.setUser(userPrincipal);
             accessor.getSessionAttributes().put("username", username);
-            log.info("WebSocket CONNECT user={} sessionId={}", username, sessionId);
+            accessor.getSessionAttributes().put("deviceId", deviceId);
+
+            log.info("WebSocket CONNECT user={} deviceId={} sessionId={}", username, deviceId, sessionId);
             return message;
         } catch (Exception e) {
             log.warn("WebSocket CONNECT denied: {}", e.getMessage());
@@ -87,7 +114,13 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
             return null;
         }
 
-        boolean allowed = isSubscriptionAllowed(username, dest);
+        if (!isSessionDeviceActive(accessor)) {
+            log.warn("WebSocket SUBSCRIBE denied: inactive device sessionId={} user={} dest={}",
+                    accessor.getSessionId(), username, dest);
+            return null;
+        }
+
+        boolean allowed = isSubscriptionAllowed(username, accessor.getSessionId(), dest);
         if (!allowed) {
             log.warn("WebSocket SUBSCRIBE denied user={} dest={}", username, dest);
             return null;
@@ -97,10 +130,14 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
         return message;
     }
 
-    private boolean isSubscriptionAllowed(String username, String dest) {
+    private boolean isSubscriptionAllowed(String username, String sessionId, String dest) {
         if (dest.startsWith("/topic/devices/")) {
             String deviceId = pathSegment(dest, 3);
-            return deviceId != null && userDeviceRepository.findByUserUsernameAndDeviceId(username, deviceId).isPresent();
+            String sessionDeviceId = sessionDeviceMap.get(sessionId);
+
+            return deviceId != null
+                    && deviceId.equals(sessionDeviceId)
+                    && userDeviceRepository.findByUserUsernameAndDeviceIdAndActiveTrue(username, deviceId).isPresent();
         }
 
         if (dest.startsWith("/topic/users/") && dest.endsWith("/chats")) {
@@ -124,6 +161,15 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
         }
 
         return false;
+    }
+
+    private boolean isSessionDeviceActive(StompHeaderAccessor accessor) {
+        String username = resolveUsername(accessor);
+        String deviceId = sessionDeviceMap.get(accessor.getSessionId());
+
+        return username != null
+                && deviceId != null
+                && userDeviceRepository.findByUserUsernameAndDeviceIdAndActiveTrue(username, deviceId).isPresent();
     }
 
     private String resolveUsername(StompHeaderAccessor accessor) {

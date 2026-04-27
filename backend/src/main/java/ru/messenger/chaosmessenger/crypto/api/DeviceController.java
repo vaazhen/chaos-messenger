@@ -1,6 +1,6 @@
 package ru.messenger.chaosmessenger.crypto.api;
-import jakarta.validation.Valid;
 
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -12,18 +12,14 @@ import ru.messenger.chaosmessenger.auth.service.DeviceRegistrationTokenService;
 import ru.messenger.chaosmessenger.crypto.device.DeviceService;
 import ru.messenger.chaosmessenger.crypto.dto.DeviceRegistrationRequest;
 import ru.messenger.chaosmessenger.crypto.dto.DeviceRegistrationResponse;
+import ru.messenger.chaosmessenger.crypto.dto.UserDeviceResponse;
+
+import java.util.List;
 
 /**
- * Device registration endpoint.
- *
- * <p>This endpoint is intentionally NOT protected by a JWT — the user has no JWT yet
- * when registering their first device. Instead it uses a short-lived
- * <em>device registration token</em> issued by {@code POST /api/auth/verify-code}
- * (TTL 60 s, one-time-use, stored in Redis).
- *
- * <p>The token must be passed in the {@code X-Device-Registration-Token} header.
+ * Device registration and management endpoints.
  */
-@Tag(name = "Crypto / Devices", description = "X3DH key bundle management")
+@Tag(name = "Crypto / Devices", description = "X3DH key bundle and device management")
 @RestController
 @RequestMapping("/api/crypto/devices")
 @RequiredArgsConstructor
@@ -33,9 +29,8 @@ public class DeviceController {
     private final DeviceRegistrationTokenService deviceRegTokenService;
 
     @Operation(
-        summary = "Register a device and upload its X3DH key bundle",
-        description = "Requires `X-Device-Registration-Token` header issued by /api/auth/verify-code. " +
-                      "The token is one-time-use with a 60-second TTL."
+            summary = "Register a device and upload its X3DH key bundle",
+            description = "Requires X-Device-Registration-Token issued by /api/auth/verify-code."
     )
     @PostMapping("/register")
     public DeviceRegistrationResponse register(
@@ -53,25 +48,24 @@ public class DeviceController {
         if (username == null) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
-                    "Invalid or expired device registration token. " +
-                    "Obtain a fresh token from POST /api/auth/verify-code."
+                    "Invalid or expired device registration token. Obtain a fresh token from POST /api/auth/verify-code."
             );
         }
+
         return deviceService.registerDevice(username, request);
     }
 
     @Operation(
-        summary = "Validate current device",
-        description = "Requires JWT authentication and X-Device-Id. Used by the frontend after page reload."
+            summary = "Validate current device",
+            description = "Requires JWT authentication and X-Device-Id. Used by frontend after page reload."
     )
     @GetMapping("/current")
     public DeviceRegistrationResponse current(
             Authentication authentication,
             @RequestHeader(value = "X-Device-Id", required = false) String deviceId
     ) {
-        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "JWT authentication is required");
-        }
+        requireAuth(authentication);
+
         if (deviceId == null || deviceId.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "X-Device-Id header is required");
         }
@@ -81,5 +75,38 @@ public class DeviceController {
                         HttpStatus.UNAUTHORIZED,
                         "Current device is not registered or inactive"
                 ));
+    }
+
+    @Operation(summary = "List my registered devices")
+    @GetMapping("/my")
+    public List<UserDeviceResponse> myDevices(
+            Authentication authentication,
+            @RequestHeader(value = "X-Device-Id", required = false) String currentDeviceId
+    ) {
+        requireAuth(authentication);
+        return deviceService.listMyDevices(authentication.getName(), currentDeviceId);
+    }
+
+    @Operation(summary = "Deactivate one of my devices")
+    @PostMapping("/{internalDeviceId}/deactivate")
+    public UserDeviceResponse deactivateDevice(
+            @PathVariable Long internalDeviceId,
+            @RequestParam(defaultValue = "false") boolean confirmLastDevice,
+            Authentication authentication,
+            @RequestHeader(value = "X-Device-Id", required = false) String currentDeviceId
+    ) {
+        requireAuth(authentication);
+        return deviceService.deactivateDevice(
+                authentication.getName(),
+                internalDeviceId,
+                confirmLastDevice,
+                currentDeviceId
+        );
+    }
+
+    private void requireAuth(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "JWT authentication is required");
+        }
     }
 }
