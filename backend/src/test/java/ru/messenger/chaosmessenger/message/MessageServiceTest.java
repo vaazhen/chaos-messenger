@@ -30,6 +30,7 @@ import ru.messenger.chaosmessenger.message.repository.MessageRepository;
 import ru.messenger.chaosmessenger.message.service.MessageService;
 import ru.messenger.chaosmessenger.user.domain.User;
 import ru.messenger.chaosmessenger.user.repository.UserRepository;
+import ru.messenger.chaosmessenger.user.service.UserIdentityService;
 
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +50,7 @@ class MessageServiceTest {
     @Mock MessageReactionRepository messageReactionRepository;
     @Mock ChatParticipantRepository participantRepository;
     @Mock UserRepository userRepository;
+    @Mock UserIdentityService userIdentityService;
     @Mock UserDeviceRepository userDeviceRepository;
     @Mock CurrentDeviceService currentDeviceService;
     @Mock UnreadService unreadService;
@@ -75,7 +77,7 @@ class MessageServiceTest {
         Message existing = TestFixtures.sentMessage(100L, 5L, 1L, "device-alice-1");
         existing.setClientMessageId("client-100");
 
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(userIdentityService.require("alice")).thenReturn(alice);
         when(currentDeviceService.requireCurrentDevice()).thenReturn(aliceDevice);
         when(participantRepository.existsByChatIdAndUserId(5L, 1L)).thenReturn(true);
         when(messageRepository.findByClientMessageId("client-100")).thenReturn(Optional.of(existing));
@@ -100,7 +102,7 @@ class MessageServiceTest {
         Message existing = TestFixtures.sentMessage(100L, 6L, 2L, "device-bob-1");
         existing.setClientMessageId("client-100");
 
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(userIdentityService.require("alice")).thenReturn(alice);
         when(currentDeviceService.requireCurrentDevice()).thenReturn(aliceDevice);
         when(participantRepository.existsByChatIdAndUserId(5L, 1L)).thenReturn(true);
         when(messageRepository.findByClientMessageId("client-100")).thenReturn(Optional.of(existing));
@@ -118,7 +120,7 @@ class MessageServiceTest {
     void markChatAsDeliveredWritesReceipt() {
         Message msg = TestFixtures.sentMessage(100L, 5L, 2L, "device-bob-1");
 
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(userIdentityService.require("alice")).thenReturn(alice);
         when(currentDeviceService.requireCurrentDevice()).thenReturn(aliceDevice);
         when(participantRepository.existsByChatIdAndUserId(5L, 1L)).thenReturn(true);
         when(messageRepository.findByChatIdAndSenderIdNot(5L, 1L)).thenReturn(List.of(msg));
@@ -141,7 +143,7 @@ class MessageServiceTest {
     void markChatAsReadWritesReceipt() {
         Message msg = TestFixtures.sentMessage(100L, 5L, 2L, "device-bob-1");
 
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(userIdentityService.require("alice")).thenReturn(alice);
         when(currentDeviceService.requireCurrentDevice()).thenReturn(aliceDevice);
         when(participantRepository.existsByChatIdAndUserId(5L, 1L)).thenReturn(true);
         when(messageRepository.findByChatIdAndSenderIdNot(5L, 1L)).thenReturn(List.of(msg));
@@ -165,7 +167,7 @@ class MessageServiceTest {
     void senderCannotUpdateOwnStatus() {
         Message msg = TestFixtures.sentMessage(1L, 5L, 1L, "device-alice");
 
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(userIdentityService.require("alice")).thenReturn(alice);
         when(currentDeviceService.requireCurrentDevice()).thenReturn(aliceDevice);
         when(messageRepository.findById(1L)).thenReturn(Optional.of(msg));
         when(participantRepository.existsByChatIdAndUserId(5L, 1L)).thenReturn(true);
@@ -181,7 +183,7 @@ class MessageServiceTest {
     void toggleReactionAddsReaction() throws Exception {
         Message msg = TestFixtures.sentMessage(100L, 5L, 2L, "device-bob-1");
 
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(userIdentityService.require("alice")).thenReturn(alice);
         when(currentDeviceService.requireCurrentDevice()).thenReturn(aliceDevice);
         when(messageRepository.findById(100L)).thenReturn(Optional.of(msg));
         when(participantRepository.existsByChatIdAndUserId(5L, 1L)).thenReturn(true);

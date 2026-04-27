@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.MessageSource;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import ru.messenger.chaosmessenger.TestFixtures;
 import ru.messenger.chaosmessenger.chat.domain.Chat;
@@ -24,6 +25,7 @@ import ru.messenger.chaosmessenger.user.domain.User;
 import ru.messenger.chaosmessenger.user.repository.UserRepository;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -41,6 +43,7 @@ class ChatServiceTest {
     @Mock UnreadService unreadService;
     @Mock OnlineService onlineService;
     @Mock SimpMessagingTemplate messagingTemplate;
+    @Mock MessageSource messageSource;
 
     @InjectMocks ChatService chatService;
 
@@ -51,6 +54,13 @@ class ChatServiceTest {
     void setUp() {
         alice = TestFixtures.user(1L, "alice");
         bob   = TestFixtures.user(2L, "bob");
+
+        lenient().when(messageSource.getMessage(
+                eq("chat.saved.name"),
+                isNull(),
+                eq("Saved Messages"),
+                any(Locale.class)
+        )).thenReturn("Saved Messages");
     }
 
     // ─── createDirectChat ───────────────────────────────────────────────────

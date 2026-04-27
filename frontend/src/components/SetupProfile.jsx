@@ -47,45 +47,62 @@ function migrateLocalStorageKeys(oldUsername, newUsername) {
   });
 }
 
-// setupToken  — present for new users (phone registration, two-phase flow)
-// onFinishSetup(data) — called instead of api.updateProfile when setupToken is set
-// onDone(updatedMe)   — called after successful profile update for existing users
+function normalizeUsername(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+// setupToken  — present for new phone users before JWT exists
+// onFinishSetup(data) — completes phone setup and creates the first JWT session
+// onDone(updatedMe)   — called after profile update for users that already have JWT
 export default function SetupProfile({ me, setupToken, onFinishSetup, onDone }) {
-  const [step,              setStep]             = useState(1);
-  const [uploadedAvatarUrl, setUploadedAvatarUrl]= useState(null);
-  const [firstName,         setFirstName]        = useState("");
-  const [lastName,          setLastName]         = useState("");
-  const [username,          setUsername]         = useState("");
-  const [bio,               setBio]              = useState("");
-  const [usernameStatus,    setUsernameStatus]   = useState(null);
-  const [loading,           setLoading]          = useState(false);
-  const [error,             setError]            = useState(null);
+  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState(null);
+  const [firstName,         setFirstName]         = useState("");
+  const [lastName,          setLastName]          = useState("");
+  const [username,          setUsername]          = useState("");
+  const [bio,               setBio]               = useState("");
+  const [usernameStatus,    setUsernameStatus]    = useState(null);
+  const [loading,           setLoading]           = useState(false);
+  const [error,             setError]             = useState(null);
 
   useEffect(() => {
+    if (me?.firstName) setFirstName(v => v || me.firstName);
+    if (me?.lastName)  setLastName(v => v || me.lastName);
+    if (me?.avatarUrl) setUploadedAvatarUrl(v => v || me.avatarUrl);
     if (me?.username && !me.username.match(/^user_[a-z0-9]{6,8}$/)) {
-      setUsername(me.username);
+      setUsername(v => v || me.username);
     }
   }, [me]);
 
   useEffect(() => {
-    const value = username.trim();
-    if (!value || value.length < 3) { setUsernameStatus(null); return; }
-    if (!/^[a-zA-Z0-9_]+$/.test(value)) { setUsernameStatus("invalid"); return; }
-    const normalized = value.toLowerCase();
-    const t = setTimeout(async () => {
+    const normalized = normalizeUsername(username);
+
+    if (!normalized) { setUsernameStatus(null); return; }
+    if (normalized.length < 3 || normalized.length > 32) { setUsernameStatus("invalid"); return; }
+    if (!/^[a-z0-9_]+$/.test(normalized)) { setUsernameStatus("invalid"); return; }
+    if (me?.username && normalized === normalizeUsername(me.username)) { setUsernameStatus("ok"); return; }
+
+    let alive = true;
+    setUsernameStatus("checking");
+
+    const timer = setTimeout(async () => {
       try {
-        const res = await api.searchUsers(normalized);
-        const taken = Array.isArray(res) && res.some(u => u.username === normalized && u.id !== me?.id);
-        setUsernameStatus(taken ? "taken" : "ok");
-      } catch { setUsernameStatus("ok"); }
-    }, 500);
-    return () => clearTimeout(t);
-  }, [username, me?.id]);
+        const res = await api.usernameAvailable(normalized);
+        if (!alive) return;
+        setUsernameStatus(res?.available ? "ok" : "taken");
+      } catch {
+        if (alive) setUsernameStatus("unknown");
+      }
+    }, 350);
+
+    return () => { alive = false; clearTimeout(timer); };
+  }, [username, me?.username]);
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
     try {
+      setError(null);
       const dataUrl = await resizeAvatarFile(file);
       setUploadedAvatarUrl(dataUrl);
     } catch (err) {
@@ -93,115 +110,70 @@ export default function SetupProfile({ me, setupToken, onFinishSetup, onDone }) 
     }
   };
 
+  const normalizedUsername = normalizeUsername(username);
+  const canSubmit = Boolean(
+    firstName.trim() &&
+    normalizedUsername &&
+    usernameStatus === "ok" &&
+    !loading
+  );
+
   const handleSave = async () => {
     if (!firstName.trim()) { setError("Enter your first name"); return; }
-    if (!username.trim() || usernameStatus === "taken" || usernameStatus === "invalid") {
-      setError("Choose a valid username"); return;
-    }
-    setLoading(true); setError(null);
+    if (usernameStatus !== "ok") { setError("Choose a valid username"); return; }
+
+    setLoading(true);
+    setError(null);
+
     try {
       const data = {
         firstName: firstName.trim(),
         lastName:  lastName.trim(),
-        username:  username.trim().toLowerCase(),
+        username:  normalizedUsername,
         avatarUrl: uploadedAvatarUrl || null,
       };
 
       if (setupToken && onFinishSetup) {
-        // ── New user (phone registration): no JWT yet, server issues it in complete-setup ──
         await onFinishSetup(data);
-        // onFinishSetup calls auth.finishSetup → completeTokenLogin → navigates to app
-        // No need to call onDone here
-      } else {
-        // ── Existing user: already has JWT, just update profile ──
-        const res = await api.updateProfile(data);
-        if (res?.token) {
-          migrateLocalStorageKeys(me?.username, res.username || data.username);
-          setToken(res.token);
-        }
-        onDone({
-          ...me,
-          firstName: data.firstName,
-          lastName:  data.lastName,
-          username:  res?.username || data.username,
-          avatarUrl: data.avatarUrl,
-        });
+        return;
       }
+
+      const res = await api.updateProfile(data);
+      if (res?.token) {
+        migrateLocalStorageKeys(me?.username, res.username || data.username);
+        setToken(res.token);
+      }
+      onDone({
+        ...me,
+        firstName: data.firstName,
+        lastName:  data.lastName,
+        username:  res?.username || data.username,
+        avatarUrl: data.avatarUrl,
+      });
     } catch (e) {
       setError(e.message || "Failed to save");
       setLoading(false);
     }
   };
 
-  // ─── Step 1: avatar ───────────────────────────────────────────────────────
-  if (step === 1) return (
-    <div className="auth">
-      <div className="auth-glow" />
-      <div className="auth-card">
-        <div className="setup-step">
-          <div className="step-dot active" />
-          <div className="step-dot" />
-        </div>
-
-        <div className="auth-logo" style={uploadedAvatarUrl ? { background: "transparent", padding: 0 } : undefined}>
-          {uploadedAvatarUrl
-            ? <img src={uploadedAvatarUrl} alt="avatar"
-                style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
-            : "🎨"}
-        </div>
-
-        <h1 className="auth-title">Choose an avatar</h1>
-        <p className="auth-sub" style={{ marginBottom: 20 }}>You can change it later in profile</p>
-
-        <div className="btn-row">
-          <label className="btn-sec" style={{ display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            Загрузить фото
-            <input type="file" accept="image/*" onChange={handleAvatarUpload} hidden />
-          </label>
-          <button type="button" className="btn-sec" onClick={() => setUploadedAvatarUrl(null)}>
-            Без фото
-          </button>
-        </div>
-
-        {error && <div className="err-bar" style={{ marginTop: 12 }}>{error}</div>}
-
-        <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => { setError(null); setStep(2); }}>
-          Next →
-        </button>
-      </div>
-    </div>
-  );
-
-  // ─── Step 2: name + username ──────────────────────────────────────────────
   return (
     <div className="auth">
       <div className="auth-glow" />
-      <div className="auth-card">
-        <div className="setup-step">
-          <div className="step-dot" />
-          <div className="step-dot active" />
-        </div>
-
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          {uploadedAvatarUrl ? (
-            <img src={uploadedAvatarUrl} alt="avatar"
-              style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto 8px", display: "block" }} />
-          ) : (
-            <div style={{
-              width: 72, height: 72, borderRadius: "50%",
-              background: "linear-gradient(135deg,#4fa3e0,#2d6fa8)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 24, fontWeight: 700, margin: "0 auto 8px",
-            }}>
-              {initials(firstName || "?")}
-            </div>
-          )}
-          <button className="back-btn" style={{ justifyContent: "center", margin: "0 auto" }} onClick={() => setStep(1)}>
-            ← Change avatar
-          </button>
-        </div>
-
+      <div className="auth-card setup-card">
         {error && <div className="err-bar">{error}</div>}
+
+        <div className="setup-avatar-wrap">
+          <label className="setup-avatar-upload" title="Загрузить фото">
+            <input type="file" accept="image/*" onChange={handleAvatarUpload} hidden />
+            {uploadedAvatarUrl ? (
+              <img src={uploadedAvatarUrl} alt="avatar" />
+            ) : (
+              <span>{initials(firstName || username || "?")}</span>
+            )}
+            <em>+</em>
+          </label>
+          <div className="setup-avatar-caption">Нажмите, чтобы загрузить фото</div>
+        </div>
 
         <h1 className="auth-title" style={{ marginBottom: 20 }}>Tell us about yourself</h1>
 
@@ -221,11 +193,13 @@ export default function SetupProfile({ me, setupToken, onFinishSetup, onDone }) 
         <div style={{ marginBottom: 16 }}>
           <div className="auth-label">Username *</div>
           <input className="inp" placeholder="ivan_petrov" value={username}
-            onChange={e => setUsername(e.target.value)} maxLength={32} />
+            onChange={e => setUsername(e.target.value.toLowerCase())} maxLength={32} />
           <div className="username-check">
-            {usernameStatus === "ok"      && <span className="username-ok">✓ Available</span>}
-            {usernameStatus === "taken"   && <span className="username-err">✗ Already taken</span>}
-            {usernameStatus === "invalid" && <span className="username-err">✗ Only letters, digits and _</span>}
+            {usernameStatus === "checking" && <span>Проверяем...</span>}
+            {usernameStatus === "ok"       && <span className="username-ok">✓ Available</span>}
+            {usernameStatus === "taken"    && <span className="username-err">✗ Already taken</span>}
+            {usernameStatus === "invalid"  && <span className="username-err">✗ Only lowercase letters, digits and _</span>}
+            {usernameStatus === "unknown"  && <span className="username-err">✗ Не удалось проверить username</span>}
           </div>
         </div>
 
@@ -239,9 +213,9 @@ export default function SetupProfile({ me, setupToken, onFinishSetup, onDone }) 
         <button
           className="btn-primary"
           onClick={handleSave}
-          disabled={loading || !firstName.trim() || !username.trim() || usernameStatus === "taken" || usernameStatus === "invalid"}
+          disabled={!canSubmit}
         >
-          {loading ? "Saving..." : "Enter messenger 🚀"}
+          {loading ? "Сохраняем..." : "Enter messenger 🚀"}
         </button>
       </div>
     </div>

@@ -56,6 +56,7 @@ export const api = {
   sendPhone:      (phone)         => call("/auth/send-code",    { method: "POST", body: JSON.stringify({ phone, via: "sms" }) }),
   verifyOtp:      (phone, code)   => call("/auth/verify-code",  { method: "POST", body: JSON.stringify({ phone, code }) }),
   completeSetup:  (setupToken, data) => call("/auth/complete-setup", { method: "POST", body: JSON.stringify({ setupToken, ...data }) }),
+  usernameAvailable: (username) => call(`/auth/username-available?username=${encodeURIComponent(username)}`),
 
   registerEmail:  (email, password) => call("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
   loginEmail:     (email, password) => call("/auth/login",    { method: "POST", body: JSON.stringify({ email, password }) }),

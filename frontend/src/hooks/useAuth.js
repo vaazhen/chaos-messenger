@@ -119,20 +119,25 @@ export function useAuth() {
 
   /**
    * Called from SetupProfile when a setupToken is present.
-   * Calls /auth/complete-setup, then does full device registration.
+   * Calls /auth/complete-setup, then creates the first full JWT session.
    */
   const finishSetup = useCallback(async (profileData, onSuccess) => {
-    if (!setupToken) return;
-    setAuthLoading(true); setAuthError(null);
+    if (!setupToken) throw new Error("Setup token is missing");
+
+    setAuthLoading(true);
+    setAuthError(null);
+
     try {
       const res = await api.completeSetup(setupToken, profileData);
-      if (!res?.token) throw new Error("Server did not return a token");
       setSetupToken(null);
-      await completeTokenLogin(res, onSuccess);
+      return await completeTokenLogin(res, onSuccess);
     } catch (err) {
-      setAuthError(err.message || "Failed to complete setup");
+      const message = err.message || "Failed to complete setup";
+      setAuthError(message);
+      throw new Error(message);
+    } finally {
+      setAuthLoading(false);
     }
-    setAuthLoading(false);
   }, [setupToken, completeTokenLogin]);
 
   const submitEmail = useCallback(async (mode, onSuccess, currentEmail, currentPassword) => {

@@ -56,6 +56,20 @@ public class AuthPhoneController {
         return ResponseEntity.ok(Map.of("exists", userRepository.existsByPhone(normalized), "phone", normalized));
     }
 
+
+    @Operation(summary = "Check username availability during setup")
+    @GetMapping("/username-available")
+    public ResponseEntity<Map<String, Object>> usernameAvailable(@RequestParam("username") String username) {
+        String normalized = username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+        boolean valid = normalized.matches("^[a-z0-9_]{3,32}$");
+        boolean available = valid && !userRepository.existsByUsername(normalized);
+        return ResponseEntity.ok(Map.of(
+                "username", normalized,
+                "valid", valid,
+                "available", available
+        ));
+    }
+
     @Operation(summary = "Send SMS verification code")
     @PostMapping("/send-code")
     public ResponseEntity<Map<String, Object>> sendCode(@Valid @RequestBody SendCodeRequest req) {
