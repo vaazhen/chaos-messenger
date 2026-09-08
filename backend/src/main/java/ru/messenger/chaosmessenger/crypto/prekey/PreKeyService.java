@@ -136,10 +136,11 @@ public class PreKeyService {
 
         OneTimePreKey oneTimePreKey = oneTimePreKeyRepository.findOneAvailableForUpdate(targetDevice.getId())
                 .orElse(null);
-        if (oneTimePreKey != null && oneTimePreKey.getUsedAt() == null) {
-            oneTimePreKey.setUsedAt(LocalDateTime.now());
-            oneTimePreKeyRepository.save(oneTimePreKey);
+        if (oneTimePreKey == null || oneTimePreKey.getUsedAt() != null) {
+            throw new CryptoException("One-time pre-key pool is empty");
         }
+        oneTimePreKey.setUsedAt(LocalDateTime.now());
+        oneTimePreKeyRepository.save(oneTimePreKey);
 
         return buildDto(targetDevice, signedPreKey, oneTimePreKey);
     }
@@ -221,12 +222,11 @@ public class PreKeyService {
 
     private DeviceBundleDto toDeviceBundleWithReservedPreKey(UserDevice device, SignedPreKey signedPreKey) {
         OneTimePreKey oneTimePreKey = oneTimePreKeyRepository.findOneAvailableForUpdate(device.getId()).orElse(null);
-
-        if (oneTimePreKey != null && oneTimePreKey.getUsedAt() == null) {
-            oneTimePreKey.setUsedAt(LocalDateTime.now());
-            oneTimePreKeyRepository.save(oneTimePreKey);
+        if (oneTimePreKey == null || oneTimePreKey.getUsedAt() != null) {
+            throw new CryptoException("One-time pre-key pool is empty");
         }
-
+        oneTimePreKey.setUsedAt(LocalDateTime.now());
+        oneTimePreKeyRepository.save(oneTimePreKey);
         return buildDto(device, signedPreKey, oneTimePreKey);
     }
 

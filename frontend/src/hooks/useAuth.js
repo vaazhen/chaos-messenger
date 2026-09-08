@@ -76,7 +76,15 @@ export function useAuth() {
   /** Called after a successful OTP / email login — sets JWT and registers device. */
   const completeTokenLogin = useCallback(async (res, onSuccess) => {
     setToken(res.token);
-    await ensureDeviceRegistered(res.deviceRegistrationToken);
+    try {
+      await ensureCurrentDeviceExists();
+    } catch (firstError) {
+      if (isRevokedDeviceAuth(firstError?.status, firstError?.message, firstError?.code)) {
+        throw firstError;
+      }
+      await ensureDeviceRegistered(res.deviceRegistrationToken);
+      await ensureCurrentDeviceExists();
+    }
     const meData = await api.getMe();
     setMe(meData);
     onSuccess(meData, res.isNewUser || !isProfileComplete(meData));

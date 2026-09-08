@@ -474,7 +474,10 @@ export function useCall({ enabled, me, sendSignal, incoming }) {
     setPhaseNow("connecting");
     playMedia(remoteAudioRef.current);
     try {
-      if (Array.isArray(offer.mediaKeys) && offer.mediaKeys.length) {
+      if (supportsMediaE2ee()) {
+        if (!Array.isArray(offer.mediaKeys) || offer.mediaKeys.length === 0) {
+          throw new Error("call-e2ee-unavailable");
+        }
         const rawKey = await decryptCallKeyEnvelope(offer.mediaKeys);
         if (!rawKey) {
           throw new Error("call-e2ee-unavailable");

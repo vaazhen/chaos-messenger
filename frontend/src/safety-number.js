@@ -216,20 +216,28 @@ function splitSafe(s) {
   }
 }
 
+function compareKeyBytes(a, b) {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return a.length - b.length;
+}
+
 export async function computeSafetyNumber(ownIdentityKey, theirIdentityKey) {
+  return computeContactSafetyNumber(ownIdentityKey, [theirIdentityKey]);
+}
+
+export async function computeContactSafetyNumber(ownIdentityKey, theirIdentityKeys) {
   const ownBytes = splitSafe(ownIdentityKey);
-  const theirBytes = splitSafe(theirIdentityKey);
-
-  const sorted = [ownBytes, theirBytes].sort((a, b) => {
-    for (let i = 0; i < Math.min(a.length, b.length); i++) {
-      if (a[i] !== b[i]) return a[i] - b[i];
-    }
-    return a.length - b.length;
-  });
-
-  const combined = new Uint8Array(sorted[0].length + sorted[1].length);
-  combined.set(sorted[0]);
-  combined.set(sorted[1], sorted[0].length);
+  const remote = (theirIdentityKeys || []).filter(Boolean).map(splitSafe);
+  const sorted = [ownBytes, ...remote].sort(compareKeyBytes);
+  const total = sorted.reduce((sum, bytes) => sum + bytes.length, 0);
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const bytes of sorted) {
+    combined.set(bytes, offset);
+    offset += bytes.length;
+  }
 
   const hash = await crypto.subtle.digest('SHA-256', combined);
   const hashBytes = new Uint8Array(hash);

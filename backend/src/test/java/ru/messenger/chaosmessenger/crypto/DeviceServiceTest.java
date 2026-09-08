@@ -236,6 +236,26 @@ class DeviceServiceTest {
         }
 
         @Test
+        void rejectsReactivatingNinthActiveDevice() throws Exception {
+            DeviceRegistrationRequest request = validRegistrationRequest("dev-1");
+            UserDevice existingDevice = TestFixtures.device(10L, alice.getId(), "dev-1");
+            existingDevice.setUser(alice);
+            existingDevice.setActive(false);
+            existingDevice.setIdentityPublicKey(request.identityPublicKey());
+            existingDevice.setSigningPublicKey(request.signingPublicKey());
+
+            when(userIdentityService.require("alice")).thenReturn(alice);
+            when(userDeviceRepository.findByUserUsernameAndDeviceId("alice", "dev-1"))
+                    .thenReturn(Optional.of(existingDevice));
+            when(userDeviceRepository.countByUserIdAndActiveTrue(alice.getId())).thenReturn(8L);
+
+            assertThatThrownBy(() -> deviceService.registerDevice("alice", request))
+                    .isInstanceOf(AuthException.class)
+                    .hasMessageContaining("8");
+            verify(userDeviceRepository, never()).save(any());
+        }
+
+        @Test
         void updatesExistingDeviceWithoutRequiringOneTimePreKeysWhenSignedPreKeyMaterialIsSame() throws Exception {
             DeviceRegistrationRequest request = validRegistrationRequest("dev-1");
             request = new DeviceRegistrationRequest(
@@ -251,6 +271,8 @@ class DeviceServiceTest {
             UserDevice existingDevice = TestFixtures.device(10L, alice.getId(), "dev-1");
             existingDevice.setUser(alice);
             existingDevice.setActive(false);
+            existingDevice.setIdentityPublicKey(request.identityPublicKey());
+            existingDevice.setSigningPublicKey(request.signingPublicKey());
 
             SignedPreKey existingSignedPreKey = SignedPreKey.builder()
                     .id(100L)
@@ -300,6 +322,24 @@ class DeviceServiceTest {
 
             verify(userDeviceRepository, never()).save(any());
             verify(signedPreKeyRepository, never()).save(any());
+        }
+
+        @Test
+        void rejectsIdentityBindWhenStoredKeysAreBlank() throws Exception {
+            DeviceRegistrationRequest request = validRegistrationRequest("dev-1");
+            UserDevice existingDevice = TestFixtures.device(10L, alice.getId(), "dev-1");
+            existingDevice.setUser(alice);
+            existingDevice.setIdentityPublicKey("  ");
+            existingDevice.setSigningPublicKey("");
+
+            when(userIdentityService.require("alice")).thenReturn(alice);
+            when(userDeviceRepository.findByUserUsernameAndDeviceId("alice", "dev-1"))
+                    .thenReturn(Optional.of(existingDevice));
+
+            assertThatThrownBy(() -> deviceService.registerDevice("alice", request))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("identity keys cannot be rotated");
+            verify(userDeviceRepository, never()).save(any());
         }
 
         @Test

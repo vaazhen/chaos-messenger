@@ -127,7 +127,7 @@ export default function MessengerShell({
     return displayNameForChat(activeChat, auth.me?.id);
   }, [activeChat, auth.me?.id, aliasTick]);
 
-  const { safetyModal, setSafetyModal, openSafetyNumber, verifySafetyDevice, closeSafetyNumber } =
+  const { safetyModal, setSafetyModal, openSafetyNumber, verifySafetyDevice, blockSafetyDevice, closeSafetyNumber } =
     useSafetyNumberModal({ activeChat, meId: auth.me?.id, l });
 
   const myMutedUntilIso = useMemo(() => {
@@ -683,6 +683,7 @@ export default function MessengerShell({
         safetyModal={safetyModal}
         onSelectDevice={(selectedDeviceId) => setSafetyModal(current => ({ ...current, selectedDeviceId }))}
         onVerify={verifySafetyDevice}
+        onBlock={blockSafetyDevice}
         onClose={closeSafetyNumber}
         l={l}
       />

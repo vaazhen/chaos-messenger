@@ -20,12 +20,15 @@ private identity keys, ratchet message keys, or a backup passphrase.
 |---|---|
 | `PREKEY_WHISPER` | First message to a device, after reserving a pre-key |
 | `WHISPER` | Later messages on an existing Double Ratchet session |
-| `SELF_WHISPER` | Fan-out to the sender's own device |
+| `SELF_WHISPER` | Fan-out to the sender's own device, Double Ratchet session on that device |
 
 AAD version `0x02` binds ciphertext to protocol type, 64-bit chat id, message
-index, previous chain length, and ratchet public key. Change any of those
-fields — AES-GCM must fail. Tampering must not consume a one-time pre-key or
-create a session.
+index, previous chain length, and ratchet public key, including `SELF_WHISPER`.
+Change any of those fields — AES-GCM must fail. Decrypt uses that one AAD;
+there is no fallback to `chatId: 0` or empty associated data. Tampering must
+not consume a one-time pre-key or create a session. New sessions require a
+one-time pre-key; an empty pool fails the send. A forged `WHISPER` must not
+delete a healthy initiator session.
 
 Layout is a 22-byte buffer (18 used + 4 trailing zeros). If a ratchet public
 key is present, the encoder appends `uint32` BE length plus Latin-1 key bytes.
@@ -44,8 +47,11 @@ Pinned hex vectors (`frontend/src/test/envelopeAad.test.js`):
 ## Device trust
 
 A new remote identity starts `UNVERIFIED`. Safety Number / QR moves it to
-`VERIFIED`. If that identity key later changes, send and decrypt raise
-`IDENTITY_KEY_CHANGED` until the user re-verifies or blocks.
+`VERIFIED`. The contact fingerprint hashes every remote identity key in the
+chat; adding a device changes it. If the peer already has a `VERIFIED` device
+and a new device appears, send raises `UNVERIFIED_DEVICE` until that device is
+verified or blocked. If that identity key later changes, send and decrypt raise
+`IDENTITY_KEY_CHANGED` until the user re-verifies or blocks (`BLOCKED`).
 
 ## Delivery
 
@@ -60,13 +66,13 @@ This is the claimed model. It is not an independent proof.
 
 | Transition | Adversary | Must hold |
 |---|---|---|
-| Reserve OTK | Chat member | Server marks OTK used before decrypt. Reserve is rate-limited. |
-| `PREKEY_WHISPER` decrypt | Network / replay | AES-GCM fail keeps OTK and creates no session. Second decrypt is `PREKEY_REPLAY`. |
-| `WHISPER` decrypt | Replay / reorder | In-order replay fails AES-GCM and does not advance `Nr`. Out-of-order uses skipped keys (`MAX_SKIP=2000`). |
-| DH ratchet | Stolen chain key | Next reverse-direction message replaces the chain (PCS after one RTT). Past message keys are gone (FS for those messages). |
-| Identity change | Malicious server | `IDENTITY_KEY_CHANGED` blocks send/decrypt until the user re-verifies. |
-| Device deactivate | Stolen device | Server stops fanout / WS / API and writes `DEVICE_REVOKED`. Peer ratchet state is not remotely wiped. |
-| Incoming call with `mediaKeys` | Failed unwrap | Callee must not fall back to DTLS. |
+| Reserve OTK | Chat member | Server marks OTK used before decrypt. Empty pool is an error, not a 3-DH fallback. Reserve is rate-limited. |
+| `PREKEY_WHISPER` decrypt | Network / replay | AES-GCM fail keeps OTK and creates no session. Missing OTK cannot establish or replace a session. Second decrypt is `PREKEY_REPLAY`. |
+| `WHISPER` decrypt | Replay / reorder | In-order replay fails AES-GCM and does not advance `Nr` or delete the session. Out-of-order uses skipped keys (`MAX_SKIP=2000`). |
+| DH ratchet | Stolen chain key | Next reverse-direction message replaces the chain (PCS after one RTT). Past message keys are gone (FS for those messages). `SELF_WHISPER` uses the same chains on the sending device. |
+| Identity change | Malicious server | `IDENTITY_KEY_CHANGED` blocks send/decrypt until the user re-verifies. A new device next to a verified one is `UNVERIFIED_DEVICE`. |
+| Device deactivate | Stolen device | Server stops fanout / WS / API and writes `DEVICE_REVOKED`. Peer ratchet state is not remotely wiped. Active-device cap 8 applies to reactivation. |
+| Incoming call with `mediaKeys` | Failed unwrap or stripped field | If the callee can do media E2EE, missing or undecryptable `mediaKeys` hang up. No DTLS fallback. |
 
 Forward secrecy: a stolen current chain key must not decrypt earlier messages whose keys were already deleted. Post-compromise security: after a DH ratchet in both directions, a stolen old chain key must not decrypt later messages.
 
@@ -100,8 +106,11 @@ and again in `RealtimeEventStore`.
 ## Backup
 
 A passphrase-derived AES-GCM key stays on the device. Restore returns identity
-material. It does not promise local history, spent one-time pre-keys, or old
-ratchet sessions.
+material, the signed pre-key, and one-time pre-keys. It does not restore
+ratchet sessions, so old `SELF_WHISPER` and peer envelopes become
+undecryptable until new sessions form. Restore keeps previously verified
+Safety Number records. Device-id conflict on register does not wipe identity
+unless the user confirms.
 
 ## Tests that pin this
 

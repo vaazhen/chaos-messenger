@@ -949,6 +949,18 @@ function replyPreview(msg) {
 function formatSendError(err) {
   const status = Number(err?.status);
   const raw = String(err?.message || "");
+  if (raw.startsWith("UNVERIFIED_DEVICE:")) {
+    return "У собеседника появилось новое устройство. Сначала проверьте Safety Number.";
+  }
+  if (raw.startsWith("IDENTITY_KEY_CHANGED:")) {
+    return "Ключ устройства изменился. Проверьте Safety Number, прежде чем писать.";
+  }
+  if (raw.startsWith("IDENTITY_BLOCKED:")) {
+    return "Это устройство заблокировано.";
+  }
+  if (raw.startsWith("ONE_TIME_PREKEY_EXHAUSTED:")) {
+    return "У собеседника закончились одноразовые ключи. Попросите открыть приложение и попробуйте снова.";
+  }
   if (status === 409 || /\b409\b/.test(raw) || /conflict/i.test(raw) || /конфликт/i.test(raw)) {
     if (/device id/i.test(raw)) return "Это устройство уже привязано к другому аккаунту. Выйди и зайди заново.";
     if (/one message|until request/i.test(raw)) return "Пока запрос не принят, можно отправить только одно сообщение.";

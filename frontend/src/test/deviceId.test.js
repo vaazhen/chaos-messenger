@@ -116,7 +116,50 @@ describe("deviceId", () => {
     expect(headers["X-Device-Registration-Token"]).toBeUndefined();
   });
 
-  it("ensureDeviceRegistered resets local identity and retries once on device id conflict", async () => {
+  it("ensureDeviceRegistered does not reset identity when server rejects key rotation", async () => {
+    const { setToken } = await import("../api");
+    setToken("jwt-token");
+
+    const rotation = new Error("Device identity keys cannot be rotated. Register a new device id instead.");
+    rotation.status = 409;
+
+    window.e2ee = {
+      getOrCreateDeviceId: vi.fn(() => "device-a"),
+      resetLocalDeviceIdentity: vi.fn(),
+      ensureDeviceRegistered: vi.fn().mockRejectedValueOnce(rotation),
+    };
+
+    const { ensureDeviceRegistered } = await import("../deviceId");
+
+    await expect(ensureDeviceRegistered("device-registration-token")).rejects.toThrow(/cannot be rotated/);
+    expect(window.e2ee.resetLocalDeviceIdentity).not.toHaveBeenCalled();
+    expect(window.e2ee.ensureDeviceRegistered).toHaveBeenCalledTimes(1);
+  });
+
+  it("ensureDeviceRegistered does not reset identity on device id conflict without confirmation", async () => {
+    const { setToken } = await import("../api");
+    setToken("jwt-token");
+
+    const conflict = new Error("Device id is already registered to another account");
+    conflict.status = 409;
+
+    window.e2ee = {
+      getOrCreateDeviceId: vi.fn(() => "device-new"),
+      resetLocalDeviceIdentity: vi.fn(),
+      ensureDeviceRegistered: vi.fn().mockRejectedValueOnce(conflict),
+    };
+
+    const { ensureDeviceRegistered } = await import("../deviceId");
+
+    await expect(ensureDeviceRegistered("device-registration-token")).rejects.toMatchObject({
+      message: expect.stringMatching(/already registered to another account/),
+      code: "DEVICE_IDENTITY_CONFLICT",
+    });
+    expect(window.e2ee.resetLocalDeviceIdentity).not.toHaveBeenCalled();
+    expect(window.e2ee.ensureDeviceRegistered).toHaveBeenCalledTimes(1);
+  });
+
+  it("ensureDeviceRegistered resets local identity after explicit confirmation", async () => {
     const { setToken } = await import("../api");
     setToken("jwt-token");
 
@@ -133,7 +176,9 @@ describe("deviceId", () => {
 
     const { ensureDeviceRegistered } = await import("../deviceId");
 
-    await expect(ensureDeviceRegistered("device-registration-token")).resolves.toBe("device-new");
+    await expect(ensureDeviceRegistered("device-registration-token", {
+      confirmIdentityReset: async () => true,
+    })).resolves.toBe("device-new");
 
     expect(window.e2ee.resetLocalDeviceIdentity).toHaveBeenCalledTimes(1);
     expect(window.e2ee.ensureDeviceRegistered).toHaveBeenCalledTimes(2);

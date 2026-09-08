@@ -232,6 +232,27 @@ class PreKeyServiceTest {
         verify(oneTimePreKeyRepository, never()).findOneAvailableForUpdate(21L);
     }
 
+    @Test
+    void reserveChatDeviceOneTimePreKeyFailsWhenPoolIsEmpty() {
+        UserDevice aliceDevice = device(10L, alice, "alice-phone");
+        UserDevice bobDevice = device(20L, bob, "bob-phone");
+
+        when(userIdentityService.require("alice")).thenReturn(alice);
+        when(currentDeviceService.requireCurrentDevice()).thenReturn(aliceDevice);
+        when(chatParticipantRepository.existsByChatIdAndUserId(100L, alice.getId())).thenReturn(true);
+        when(userDeviceRepository.findByDeviceIdAndActiveTrueWithUser("bob-phone"))
+                .thenReturn(java.util.Optional.of(bobDevice));
+        when(chatParticipantRepository.existsByChatIdAndUserId(100L, bob.getId())).thenReturn(true);
+        when(signedPreKeyRepository.findLatestByDeviceIds(List.of(20L)))
+                .thenReturn(List.of(signedPreKey(bobDevice, 7, "signed-public", "signature")));
+        when(oneTimePreKeyRepository.findOneAvailableForUpdate(20L))
+                .thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> preKeyService.reserveChatDeviceOneTimePreKey("alice", 100L, "bob-phone"))
+                .isInstanceOf(ru.messenger.chaosmessenger.common.exception.CryptoException.class)
+                .hasMessageContaining("empty");
+    }
+
     private static UserDevice device(Long id, User user, String deviceId) {
         UserDevice device = new UserDevice();
         device.setId(id);

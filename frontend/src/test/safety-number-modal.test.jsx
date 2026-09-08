@@ -77,4 +77,22 @@ describe("SafetyNumberModal", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "device-bob-1" } });
     expect(onSelectDevice).toHaveBeenCalledWith("device-bob-1");
   });
+
+  it("blocks a device from the modal", async () => {
+    const onBlock = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <SafetyNumberModal
+        safetyModal={modal()}
+        onClose={vi.fn()}
+        onSelectDevice={vi.fn()}
+        onVerify={vi.fn()}
+        onBlock={onBlock}
+        l={l}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Block" }));
+    await waitFor(() => expect(onBlock).toHaveBeenCalledWith("device-bob-1"));
+  });
 });
