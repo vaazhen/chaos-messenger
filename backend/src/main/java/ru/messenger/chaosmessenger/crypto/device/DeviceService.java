@@ -424,10 +424,13 @@ public class DeviceService {
 
         validateOneTimePreKeys(request);
 
-        oneTimePreKeyRepository.deleteByDeviceId(device.getId());
+        oneTimePreKeyRepository.deleteByDeviceIdAndUsedAtIsNull(device.getId());
         oneTimePreKeyRepository.flush();
 
         List<OneTimePreKey> preKeys = request.oneTimePreKeys().stream()
+                .filter(dto -> oneTimePreKeyRepository
+                        .findByDeviceIdAndPreKeyId(device.getId(), dto.preKeyId())
+                        .isEmpty())
                 .map(dto -> OneTimePreKey.builder()
                         .device(device)
                         .preKeyId(dto.preKeyId())
@@ -436,7 +439,9 @@ public class DeviceService {
                         .build())
                 .toList();
 
-        oneTimePreKeyRepository.saveAll(preKeys);
+        if (!preKeys.isEmpty()) {
+            oneTimePreKeyRepository.saveAll(preKeys);
+        }
     }
 
     private void validateOneTimePreKeys(DeviceRegistrationRequest request) {

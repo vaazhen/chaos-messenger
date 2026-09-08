@@ -227,9 +227,9 @@ export async function computeSafetyNumber(ownIdentityKey, theirIdentityKey) {
   return computeContactSafetyNumber(ownIdentityKey, [theirIdentityKey]);
 }
 
-export async function computeContactSafetyNumber(ownIdentityKey, theirIdentityKeys) {
+export async function computeContactSafetyNumber(ownIdentityKey, theirIdentityKeys, extraKeys = []) {
   const ownBytes = splitSafe(ownIdentityKey);
-  const remote = (theirIdentityKeys || []).filter(Boolean).map(splitSafe);
+  const remote = [...(theirIdentityKeys || []), ...(extraKeys || [])].filter(Boolean).map(splitSafe);
   const sorted = [ownBytes, ...remote].sort(compareKeyBytes);
   const total = sorted.reduce((sum, bytes) => sum + bytes.length, 0);
   const combined = new Uint8Array(total);

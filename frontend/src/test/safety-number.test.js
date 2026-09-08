@@ -55,6 +55,13 @@ describe('computeSafetyNumber', () => {
     const two = await mod.computeContactSafetyNumber('own', ['device-a', 'device-b']);
     expect(one.fingerprint).not.toBe(two.fingerprint);
   });
+
+  it('changes the contact fingerprint when a signing key is added', async () => {
+    const mod = await import('../safety-number');
+    const identitiesOnly = await mod.computeContactSafetyNumber('own', ['device-a']);
+    const withSigning = await mod.computeContactSafetyNumber('own', ['device-a'], ['signing-a']);
+    expect(identitiesOnly.fingerprint).not.toBe(withSigning.fingerprint);
+  });
 });
 
 describe('formatSafetyNumber', () => {

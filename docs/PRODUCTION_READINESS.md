@@ -13,7 +13,7 @@
 | P0-7 | Backup passphrase remains client-side | P0 | VERIFIED | `BackupController`, `api.js`, `BackupModal.jsx` | export has no passphrase header; `api.test.js` |
 | P0-8 | Device linking step-up | P0 | VERIFIED | auth services | backend tests |
 | AUTH-1 | Atomic refresh rotation | P1 | VERIFIED | `RefreshTokenService.java` | backend tests |
-| SEC-3 | AAD protocol v2 and 64-bit chat ID | P1 | VERIFIED | `crypto-engine.ts` | crypto tests |
+| SEC-3 | AAD protocol v3 and 64-bit chat ID | P1 | VERIFIED | `crypto-engine.ts` | crypto tests |
 | TS-1 | Real TypeScript gate includes crypto engine | P1 | VERIFIED | `tsconfig.json`, CI | local typecheck |
 | TS-2 | Protocol DTO strict gate | P1 | VERIFIED | `tsconfig.protocol.json` | local typecheck |
 | TS-3 | Full strict typing of crypto engine | P1 | VERIFIED | `crypto-engine.ts`, `tsconfig.crypto.json` | `typecheck:crypto` + `typecheck:protocol` |
@@ -48,7 +48,7 @@
 | CALL-2 | Incoming call with `mediaKeys` fails closed | P1 | VERIFIED | `useCall.js` | `useCall.test.js` |
 | AUTH-7 | Exists lookup does not echo phone | P1 | VERIFIED | `AuthService` | empty phone field |
 | AUTH-8 | Tighter IP limits on lookup and SMS verify | P1 | VERIFIED | `CredentialRateLimiter` | limiter test |
-| PREKEY-1 | Reserve-prekey uses the prekey user limiter | P1 | VERIFIED | `BundleController` | `BundleControllerTest` |
+| PREKEY-1 | Reserve-prekey uses user + per-target limiter | P1 | VERIFIED | `BundleController`, `CredentialRateLimiter` | `BundleControllerTest`, `CredentialRateLimiterTest` |
 | ATT-2 | Attachment upload/download streams | P1 | VERIFIED | `AttachmentStorageService`, controller | storage + controller tests |
 | GROUP-1 | Pairwise groups capped at 32 | P1 | VERIFIED | `ChatLimits`, `GroupModerationService` | `GroupModerationServiceTest` |
 | DEVICE-1 | At most 8 active devices | P1 | VERIFIED | `DeviceLimits`, `DeviceService` | `DeviceServiceTest` |

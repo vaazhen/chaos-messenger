@@ -42,7 +42,7 @@ public class BundleController {
             Authentication authentication
     ) {
         currentDeviceService.requireCurrentDevice();
-        credentialRateLimiter.checkUserAction(authentication.getName(), "prekey");
+        credentialRateLimiter.checkPrekeyReserve(authentication.getName(), targetDeviceId);
         return preKeyService.reserveChatDeviceOneTimePreKey(authentication.getName(), chatId, targetDeviceId);
     }
 }

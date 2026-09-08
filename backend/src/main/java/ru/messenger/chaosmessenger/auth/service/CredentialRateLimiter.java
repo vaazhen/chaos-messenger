@@ -24,6 +24,9 @@ public class CredentialRateLimiter {
     private static final Duration REGISTER_WINDOW = Duration.ofHours(1);
     private static final int IP_LIMIT = 40;
     private static final Duration IP_WINDOW = Duration.ofMinutes(15);
+    private static final int PREKEY_USER_LIMIT = 20;
+    private static final int PREKEY_TARGET_LIMIT = 4;
+    private static final Duration PREKEY_WINDOW = Duration.ofMinutes(15);
     private static final long INFRA_RETRY_AFTER_SECONDS = 60;
 
     private static final DefaultRedisScript<Long> INCREMENT_WITH_TTL = new DefaultRedisScript<>("""
@@ -56,14 +59,29 @@ public class CredentialRateLimiter {
         );
     }
 
+    public void checkPrekeyReserve(String username, String targetDeviceId) {
+        checkUserAction(username, "prekey");
+        String identity = (username == null || username.isBlank()) ? "unknown" : username.trim();
+        String target = (targetDeviceId == null || targetDeviceId.isBlank()) ? "unknown" : targetDeviceId.trim();
+        enforce(
+                "auth:user:prekey-target:",
+                identity + ":" + target,
+                PREKEY_TARGET_LIMIT,
+                PREKEY_WINDOW,
+                "Too many pre-key reservations for this device. Try again later."
+        );
+    }
+
     public void checkUserAction(String username, String action) {
         String identity = (username == null || username.isBlank()) ? "unknown" : username.trim();
         String safeAction = action != null && action.matches("[a-z]+") ? action : "other";
+        int limit = "prekey".equals(safeAction) ? PREKEY_USER_LIMIT : 80;
+        Duration window = "prekey".equals(safeAction) ? PREKEY_WINDOW : Duration.ofMinutes(15);
         enforce(
                 "auth:user:" + safeAction + ":",
                 identity,
-                80,
-                Duration.ofMinutes(15),
+                limit,
+                window,
                 "Too many requests. Try again later."
         );
     }

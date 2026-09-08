@@ -1,6 +1,6 @@
 import { getE2ee } from "./e2ee";
 
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;
 
 export async function createEncryptedBackup(passphrase) {
   const e2ee = getE2ee();
@@ -17,8 +17,7 @@ export async function createEncryptedBackup(passphrase) {
     registrationId: String(bundle.registrationId),
     identityKeyPair: JSON.stringify(bundle.identity),
     signingKeyPair: bundle.signingKey ? JSON.stringify(bundle.signingKey) : null,
-    signedPreKey: bundle.signedPreKey ? JSON.stringify(bundle.signedPreKey) : null,
-    oneTimePreKeys: bundle.oneTimePreKeys ? JSON.stringify(bundle.oneTimePreKeys) : null,
+    consumedPreKeyIds: JSON.stringify(bundle.consumedPreKeyIds || []),
     createdAt: new Date().toISOString(),
   });
 
@@ -110,7 +109,7 @@ export async function decryptBackup(encryptedPayload, salt, iv, passphrase, chec
 }
 
 export async function restoreKeysFromBackup(backupData) {
-  const { deviceId, registrationId, identityKeyPair, signingKeyPair, signedPreKey, oneTimePreKeys } = backupData;
+  const { deviceId, registrationId, identityKeyPair, signingKeyPair, consumedPreKeyIds } = backupData;
 
   const e2ee = getE2ee();
   if (!e2ee?.importLocalDeviceBundle) {
@@ -119,14 +118,25 @@ export async function restoreKeysFromBackup(backupData) {
   if (!deviceId || !identityKeyPair) {
     throw new Error('Backup is missing the device identity');
   }
+  if (!signingKeyPair) {
+    throw new Error('Backup is missing the signing key');
+  }
+
+  let parsedConsumed = [];
+  try {
+    parsedConsumed = consumedPreKeyIds ? JSON.parse(consumedPreKeyIds) : [];
+  } catch {
+    parsedConsumed = [];
+  }
 
   const bundle = {
     deviceId,
     registrationId: Number(registrationId) || 0,
     identity: JSON.parse(identityKeyPair),
-    signingKey: signingKeyPair ? JSON.parse(signingKeyPair) : null,
-    signedPreKey: signedPreKey ? JSON.parse(signedPreKey) : null,
-    oneTimePreKeys: oneTimePreKeys ? JSON.parse(oneTimePreKeys) : [],
+    signingKey: JSON.parse(signingKeyPair),
+    signedPreKey: null,
+    oneTimePreKeys: [],
+    consumedPreKeyIds: Array.isArray(parsedConsumed) ? parsedConsumed : [],
   };
 
   await e2ee.importLocalDeviceBundle(bundle);

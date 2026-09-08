@@ -12,6 +12,7 @@ export interface EncryptedEnvelope {
   targetDeviceId: string;
   targetUserId: number;
   messageType: MessageType;
+  senderDeviceId?: string;
   senderIdentityPublicKey: string;
   ephemeralPublicKey: string | null;
   ratchetPublicKey: string | null;
@@ -40,6 +41,7 @@ export interface DecryptEnvelope {
   oneTimePreKeyId?: number | null;
   ephemeralPublicKey?: string | null;
   _chatId?: number;
+  _senderUserId?: number;
 }
 
 /** DH ratchet key pair stored with the session (PKCS#8 private key). */
@@ -101,6 +103,7 @@ export interface DeviceBundle {
   signedPreKey: PreKey;
   previousSignedPreKey?: PreKey;
   oneTimePreKeys: PreKey[];
+  consumedPreKeyIds?: number[];
 }
 
 /** Target device info returned by resolve-chat-devices API. */
@@ -143,6 +146,7 @@ export interface RemoteIdentityTrust {
   verificationMethod?: VerificationMethod;
   verifiedAt?: number;
   identityPublicKey: string;
+  userId?: number;
   firstSeenAt?: number;
   lastSeenAt?: number;
   changedAt?: number;
@@ -161,6 +165,8 @@ export interface AADContext {
   chatId?: number | undefined;
   messageIndex?: number | null | undefined;
   previousChainLength?: number | null | undefined;
+  senderDeviceId?: string | null | undefined;
+  targetDeviceId?: string | null | undefined;
   ratchetPublicKey?: string | null | undefined;
 }
 
@@ -271,8 +277,6 @@ export interface CryptoEngine {
   __clearSecureStorageForTests?(): Promise<void>;
   __importSessionStateForTests?(sessions: Record<string, RatchetSession>): Promise<void>;
   __exportSessionStateForTests?(): Record<string, RatchetSession>;
-  // Old API (backward compat during transition)
-  deriveSelfEnvelopeKey?(bundle: DeviceBundle): Promise<CryptoKey>;
 }
 
 declare global {

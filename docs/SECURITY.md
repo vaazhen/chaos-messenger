@@ -27,8 +27,9 @@ It is not Telegram-with-Kafka and not Signal.
 
 The current X3DH-inspired + Double Ratchet-style contract is frozen in
 `docs/protocol.md`. New crypto features wait. Property the tests already
-pin: AAD v2, self-whisper ratchet, OTK fail-closed, PREKEY replay, WHISPER replay,
-skip keys, identity change, unverified extra device, incoming-call fail-closed.
+pin: AAD v3, self-whisper ratchet, OTK fail-closed, PREKEY replay, WHISPER replay,
+skip keys, identity change, unverified extra device (not grouped by `userId`),
+incoming-call fail-closed.
 
 ## Operator drills
 

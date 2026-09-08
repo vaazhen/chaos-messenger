@@ -36,6 +36,7 @@ export async function decryptMsg(
         msg.envelope,
         msg.senderDeviceId,
         (msg.chatId || fallbackChatId) as number,
+        msg.senderId,
       );
       decryptedText = await e2ee.decryptEnvelope(envelope as DecryptEnvelope);
     } catch (e) {

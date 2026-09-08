@@ -11,12 +11,16 @@ export function envelopeForDecrypt<T extends object>(
   envelope: T | null | undefined,
   senderDeviceId?: string,
   chatId?: number | null,
+  senderUserId?: number | string | null,
 ): T | null | undefined {
   if (!envelope) return envelope;
   return {
     ...envelope,
     senderDeviceId: senderDeviceId || (envelope as { senderDeviceId?: string }).senderDeviceId,
     _chatId: chatId ?? (envelope as { _chatId?: number })._chatId,
+    ...(senderUserId != null && senderUserId !== ''
+      ? { _senderUserId: Number(senderUserId) }
+      : {}),
   };
 }
 

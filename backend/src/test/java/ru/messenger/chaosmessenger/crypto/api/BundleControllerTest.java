@@ -81,7 +81,7 @@ class BundleControllerTest {
 
         assertThat(response).isSameAs(expected);
         verify(currentDeviceService).requireCurrentDevice();
-        verify(credentialRateLimiter).checkUserAction("alice", "prekey");
+        verify(credentialRateLimiter).checkPrekeyReserve("alice", "dev-b");
         verify(preKeyService).reserveChatDeviceOneTimePreKey("alice", 100L, "dev-b");
     }
 }
