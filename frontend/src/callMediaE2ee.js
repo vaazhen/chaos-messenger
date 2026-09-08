@@ -60,7 +60,7 @@ export async function encryptCallKeyForChat(chatId, rawKey) {
 export async function decryptCallKeyEnvelope(envelopes) {
   if (!getE2ee()?.decryptEnvelope || !Array.isArray(envelopes)) return null;
   const ownId = getOrCreateDeviceId();
-  const mine = envelopes.find((item) => item?.targetDeviceId === ownId) || envelopes[0];
+  const mine = envelopes.find((item) => item?.targetDeviceId === ownId);
   if (!mine) return null;
   const plaintext = await getE2ee().decryptEnvelope(mine);
   if (!String(plaintext).startsWith(CALL_KEY_PREFIX)) return null;

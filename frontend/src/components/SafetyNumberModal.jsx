@@ -13,6 +13,11 @@ const TRUST_COPY = {
     en: "The device key changed. Do not trust this conversation until you verify it again.",
     className: "changed",
   },
+  BLOCKED: {
+    ru: "Устройство заблокировано. Сообщения на него не шифруются.",
+    en: "This device is blocked. Messages are not encrypted to it.",
+    className: "changed",
+  },
   UNVERIFIED: {
     ru: "Устройство ещё не подтверждено",
     en: "Device not verified yet",
@@ -20,7 +25,7 @@ const TRUST_COPY = {
   },
 };
 
-export default function SafetyNumberModal({ safetyModal, onClose, onSelectDevice, onVerify, l }) {
+export default function SafetyNumberModal({ safetyModal, onClose, onSelectDevice, onVerify, onBlock, l }) {
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState("");
 
@@ -81,6 +86,13 @@ export default function SafetyNumberModal({ safetyModal, onClose, onSelectDevice
               {l(trust.ru, trust.en)}
             </div>
 
+            {safetyModal.contactDisplay && (safetyModal.devices || []).length > 1 && (
+              <div className="safety-section">
+                <div className="safety-label">{l("Отпечаток всех устройств", "All-device fingerprint")}</div>
+                <div className="safety-value safety-numeric">{safetyModal.contactDisplay.numeric}</div>
+              </div>
+            )}
+
             <div className="safety-section">
               <div className="safety-label">{l("Цифровой отпечаток", "Numeric fingerprint")}</div>
               <div className="safety-value safety-numeric">{selected.display?.numeric || ""}</div>
@@ -110,13 +122,18 @@ export default function SafetyNumberModal({ safetyModal, onClose, onSelectDevice
           <Button variant="secondary" onClick={handleCopy} disabled={!selected}>
             {l("Копировать", "Copy")}
           </Button>
-          {selected?.trustState !== "VERIFIED" ? (
+          {selected?.trustState !== "VERIFIED" && selected?.trustState !== "BLOCKED" ? (
             <Button onClick={handleVerify} disabled={verifying || !selected}>
               {verifying ? l("Сохранение…", "Saving…") : l("Подтвердить", "Verify")}
             </Button>
           ) : (
             <Button onClick={onClose}>
               {l("Готово", "Done")}
+            </Button>
+          )}
+          {selected && selected.trustState !== "BLOCKED" && onBlock && (
+            <Button variant="secondary" onClick={() => onBlock(selected.deviceId)}>
+              {l("Заблокировать", "Block")}
             </Button>
           )}
         </div>

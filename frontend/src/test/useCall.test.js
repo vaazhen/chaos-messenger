@@ -78,6 +78,7 @@ describe("useCall", () => {
     vi.clearAllMocks();
     createdPcs.length = 0;
     delete window.e2ee;
+    delete globalThis.RTCRtpScriptTransform;
     globalThis.RTCPeerConnection = MockPC;
     globalThis.RTCIceCandidate = class RTCIceCandidate {
       constructor(init) {
@@ -306,6 +307,7 @@ describe("useCall", () => {
   });
 
   it("rejects an incoming offer whose mediaKeys cannot be decrypted", async () => {
+    globalThis.RTCRtpScriptTransform = function RTCRtpScriptTransform() {};
     callMediaMocks.decryptCallKeyEnvelope.mockResolvedValueOnce(null);
     const { useCall } = await import("../hooks/useCall");
     const sendSignal = vi.fn();
@@ -334,5 +336,34 @@ describe("useCall", () => {
     expect(result.current.mediaError).toBe("e2ee");
     expect(sendSignal).toHaveBeenCalledWith({ chatId: 50, type: "hangup" });
     expect(sendSignal.mock.calls.some((call) => call[0]?.type === "answer")).toBe(false);
+  });
+
+  it("rejects an incoming offer whose mediaKeys were stripped", async () => {
+    globalThis.RTCRtpScriptTransform = function RTCRtpScriptTransform() {};
+    const { useCall } = await import("../hooks/useCall");
+    const sendSignal = vi.fn();
+    const { result } = renderHook(() => useCall({
+      enabled: true,
+      me: { username: "alice" },
+      sendSignal,
+    }));
+
+    await act(async () => {
+      result.current.handleSignal({
+        type: "offer",
+        chatId: 50,
+        fromUsername: "bob",
+        fromDeviceId: "bob-laptop",
+        sdp: "offer-sdp",
+      });
+    });
+
+    await act(async () => {
+      await result.current.acceptCall();
+    });
+
+    expect(result.current.phase).toBe("error");
+    expect(result.current.mediaError).toBe("e2ee");
+    expect(sendSignal).toHaveBeenCalledWith({ chatId: 50, type: "hangup" });
   });
 });

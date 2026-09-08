@@ -41,7 +41,7 @@ export function getOrCreateDeviceId() {
  *
  * @param {string} [deviceRegistrationToken] — short-lived token (60 s) from login.
  */
-export async function ensureDeviceRegistered(deviceRegistrationToken) {
+export async function ensureDeviceRegistered(deviceRegistrationToken, options = {}) {
   const e2ee = getE2ee();
   if (!e2ee?.ensureDeviceRegistered) {
     if (import.meta.env.DEV) console.warn("[E2EE] crypto engine is not loaded");
@@ -67,6 +67,13 @@ export async function ensureDeviceRegistered(deviceRegistrationToken) {
     if (!isDeviceIdentityConflict(error) || !e2ee?.resetLocalDeviceIdentity) {
       throw error;
     }
+    const confirmed = typeof options.confirmIdentityReset === "function"
+      ? await options.confirmIdentityReset(error)
+      : false;
+    if (!confirmed) {
+      error.code = error.code || "DEVICE_IDENTITY_CONFLICT";
+      throw error;
+    }
 
     if (import.meta.env.DEV) console.warn("[E2EE] Device id conflict, resetting local identity and retrying registration");
     await e2ee.resetLocalDeviceIdentity();
@@ -80,7 +87,7 @@ export async function ensureDeviceRegistered(deviceRegistrationToken) {
 
 function isDeviceIdentityConflict(error) {
   const message = String(error?.message || "").toLowerCase();
-  return error?.status === 409 && message.includes("device id");
+  return error?.status === 409 && message.includes("already registered to another account");
 }
 
 /**

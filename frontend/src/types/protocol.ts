@@ -89,6 +89,7 @@ export interface PreKey {
   privateKeyPkcs8: string;
   signature?: string;
   published?: boolean;
+  createdAt?: number;
 }
 
 /** Full device bundle stored in IndexedDB / LocalStorage. */
@@ -98,6 +99,7 @@ export interface DeviceBundle {
   identity: IdentityKeyPair;
   signingKey: SigningKeyPair;
   signedPreKey: PreKey;
+  previousSignedPreKey?: PreKey;
   oneTimePreKeys: PreKey[];
 }
 
@@ -134,7 +136,7 @@ export interface FanoutRequest {
 }
 
 /** Trust state for a remote device identity. */
-export type TrustState = 'UNVERIFIED' | 'VERIFIED' | 'KEY_CHANGED';
+export type TrustState = 'UNVERIFIED' | 'VERIFIED' | 'KEY_CHANGED' | 'BLOCKED';
 
 export interface RemoteIdentityTrust {
   trustState: TrustState;
@@ -262,6 +264,7 @@ export interface CryptoEngine {
   decryptFile(encryptedArrayBuffer: ArrayBuffer, fileKeyBase64: string): Promise<ArrayBuffer>;
   getRemoteIdentityTrust(deviceId: string, identityPublicKey?: string | null): RemoteIdentityTrust;
   verifyRemoteIdentity(deviceId: string, identityPublicKey: string, method?: VerificationMethod): Promise<void>;
+  blockRemoteIdentity(deviceId: string, identityPublicKey: string): Promise<void>;
   importLocalDeviceBundle(bundle: DeviceBundle): Promise<string>;
   getSecureStorageBackend(): string;
   // Test-only internals

@@ -11,14 +11,14 @@ Contract text: `docs/protocol.md`. Tests pin vectors and a few negative paths.
 
 ## Scope an auditor should treat as in
 
-- Envelope AAD v2 binding and all decrypt fallbacks (`chatId: 0`, missing ratchet key).
-- OTK reserve-on-server vs consume-on-client (window for exhaustion / reuse).
+- Envelope AAD v2 binding with a single decrypt AAD (no `chatId: 0` / empty fallbacks).
+- OTK reserve-on-server vs consume-on-client; empty pool fails closed.
 - PREKEY and WHISPER replay, skipped-key bounds, concurrent send indexes.
-- Identity substitution vs Safety Number (TOFU).
-- Device revoke: delivery stop vs leftover peer sessions.
+- Identity substitution vs Safety Number (TOFU); new device beside a verified one.
+- Device revoke: delivery stop vs leftover peer sessions; 8-active cap on reactivation.
 - Group fanout (pairwise, no MLS / sender keys). Cap 32 participants.
-- Device cap 8; revoke stops API/fanout/WS, does not wipe peer sessions.
-- Call media key wrap; fail-closed on callee.
+- `SELF_WHISPER` Double Ratchet on the sending device.
+- Call media key wrap; fail-closed on callee, including stripped `mediaKeys`.
 - Web origin: server-delivered JS can steal keys. Electron/signed client is
   the high-assurance distribution path.
 

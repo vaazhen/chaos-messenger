@@ -16,7 +16,7 @@ function simpleHash(input) {
 
 const mockCrypto = {
   subtle: {
-    digest: vi.fn(async (data) => simpleHash(data)),
+    digest: vi.fn(async (_algorithm, data) => simpleHash(data)),
   },
 };
 
@@ -47,6 +47,13 @@ describe('computeSafetyNumber', () => {
     expect(result1.fingerprint).toBe(result2.fingerprint);
     expect(result1.wordList).toEqual(result2.wordList);
     expect(result1.bytes).toEqual(result2.bytes);
+  });
+
+  it('changes the contact fingerprint when a second device key is added', async () => {
+    const mod = await import('../safety-number');
+    const one = await mod.computeContactSafetyNumber('own', ['device-a']);
+    const two = await mod.computeContactSafetyNumber('own', ['device-a', 'device-b']);
+    expect(one.fingerprint).not.toBe(two.fingerprint);
   });
 });
 

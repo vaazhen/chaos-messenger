@@ -104,6 +104,7 @@ describe("useAuth critical frontend auth flow", () => {
       setupToken: "setup-token-1",
     });
 
+    mocks.ensureCurrentDeviceExists.mockRejectedValueOnce(new Error("device is not registered"));
     mocks.api.completeSetup.mockResolvedValueOnce({
       token: "jwt-after-setup",
       refreshToken: "refresh-after-setup",
@@ -278,6 +279,7 @@ describe("useAuth critical frontend auth flow", () => {
   it("submitEmail trims/lowercases email and performs full login", async () => {
     const { useAuth } = await import("../hooks/useAuth");
 
+    mocks.ensureCurrentDeviceExists.mockRejectedValueOnce(new Error("device is not registered"));
     mocks.api.loginEmail.mockResolvedValueOnce({
       token: "jwt-email",
       refreshToken: "refresh-email",
@@ -302,6 +304,37 @@ describe("useAuth critical frontend auth flow", () => {
     expect(mocks.api.loginEmail).toHaveBeenCalledWith("alice@test.com", "pass123");
     expect(mocks.setToken).toHaveBeenCalledWith("jwt-email");
     expect(mocks.ensureDeviceRegistered).toHaveBeenCalledWith("device-reg-email");
+    expect(onSuccess).toHaveBeenCalledWith({
+      id: 1,
+      username: "alice",
+      firstName: "Alice",
+    }, false);
+  });
+
+  it("login on the same enrolled device rebinds it and does not re-register", async () => {
+    const { useAuth } = await import("../hooks/useAuth");
+
+    mocks.api.loginEmail.mockResolvedValueOnce({
+      token: "jwt-email",
+      refreshToken: "refresh-email",
+      deviceRegistrationToken: "device-reg-email",
+      isNewUser: false,
+    });
+    mocks.api.getMe.mockResolvedValueOnce({
+      id: 1,
+      username: "alice",
+      firstName: "Alice",
+    });
+
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() => useAuth());
+
+    await act(async () => {
+      await result.current.submitEmail("login", onSuccess, "alice@test.com", "pass123");
+    });
+
+    expect(mocks.ensureCurrentDeviceExists).toHaveBeenCalledTimes(1);
+    expect(mocks.ensureDeviceRegistered).not.toHaveBeenCalled();
     expect(onSuccess).toHaveBeenCalledWith({
       id: 1,
       username: "alice",

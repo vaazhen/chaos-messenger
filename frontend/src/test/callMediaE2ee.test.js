@@ -69,6 +69,19 @@ describe("callMediaE2ee", () => {
     expect(Array.from(bytes)).toEqual(Array.from(key));
   });
 
+  it("does not unwrap another device envelope as a fallback", async () => {
+    window.e2ee = {
+      decryptEnvelope: vi.fn(async (envelope) => envelope.plaintext),
+    };
+    const { decryptCallKeyEnvelope } = await import("../callMediaE2ee");
+    const key = new Uint8Array(32).fill(7);
+    const encoded = btoa(String.fromCharCode(...key));
+    await expect(decryptCallKeyEnvelope([
+      { targetDeviceId: "other", plaintext: `chaos-call-key:v1:${encoded}` },
+    ])).resolves.toBeNull();
+    expect(window.e2ee.decryptEnvelope).not.toHaveBeenCalled();
+  });
+
   it("rejects envelopes that are not call keys", async () => {
     window.e2ee = {
       decryptEnvelope: vi.fn(async () => "not-a-call-key"),

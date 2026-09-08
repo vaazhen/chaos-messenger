@@ -127,14 +127,15 @@ public class DeviceService {
                         "DEVICE_REVOKED"
                 );
             }
-            assertUnchangedIdentity(existing, request, allowNewDevice);
+            assertUnchangedIdentity(existing, request);
         }
 
         boolean newDevice = existingDevice.isEmpty();
+        boolean reactivating = !newDevice && !existingDevice.get().isActive();
         if (newDevice && (request.oneTimePreKeys() == null || request.oneTimePreKeys().isEmpty())) {
             throw new IllegalArgumentException("At least one one-time pre-key is required");
         }
-        if (newDevice
+        if ((newDevice || reactivating)
                 && userDeviceRepository.countByUserIdAndActiveTrue(user.getId()) >= DeviceLimits.MAX_ACTIVE_DEVICES) {
             throw new AuthException("Cannot register more than " + DeviceLimits.MAX_ACTIVE_DEVICES + " active devices");
         }
@@ -259,16 +260,13 @@ public class DeviceService {
 
     private void assertUnchangedIdentity(
             UserDevice existing,
-            DeviceRegistrationRequest request,
-            boolean allowNewDevice
+            DeviceRegistrationRequest request
     ) {
         boolean storedIdentity = existing.getIdentityPublicKey() != null && !existing.getIdentityPublicKey().isBlank();
         boolean storedSigning = existing.getSigningPublicKey() != null && !existing.getSigningPublicKey().isBlank();
-        if (!storedIdentity && !storedSigning) {
-            if (!allowNewDevice) {
-                throw new AuthException("New device enrollment requires a login registration token");
-            }
-            return;
+        if (!storedIdentity || !storedSigning) {
+            throw new IllegalStateException(
+                    "Device identity keys cannot be rotated. Register a new device id instead.");
         }
         if (!sameKeyMaterial(existing.getIdentityPublicKey(), request.identityPublicKey())
                 || !sameKeyMaterial(existing.getSigningPublicKey(), request.signingPublicKey())) {

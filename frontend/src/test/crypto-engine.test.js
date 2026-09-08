@@ -133,7 +133,7 @@ describe("crypto-engine frontend safety checks", () => {
     })).rejects.toThrow("Local device bundle is missing");
   });
 
-  it("encrypts self envelopes with private identity material instead of public key material", async () => {
+  it("encrypts self envelopes with a ratchet session, not the identity key", async () => {
     await loadCryptoEngine();
     const bundle = testBundle();
     await activateDevice(bundle);
@@ -147,7 +147,10 @@ describe("crypto-engine frontend safety checks", () => {
     const request = await window.e2ee.buildFanoutRequest(api, 100, "private self secret");
     const selfEnvelope = request.envelopes[0];
     expect(selfEnvelope.messageType).toBe("SELF_WHISPER");
+    expect(selfEnvelope.ratchetPublicKey).toBeTruthy();
+    expect(selfEnvelope.messageIndex).toBe(0);
 
+    const sessions = getSessions();
     await window.e2ee.importLocalDeviceBundle({
       ...bundle,
       identity: {
@@ -155,6 +158,7 @@ describe("crypto-engine frontend safety checks", () => {
         publicKey: bytesToB64(new Uint8Array(32).fill(99)),
       },
     });
+    await window.e2ee.__importSessionStateForTests(sessions);
 
     await expect(window.e2ee.decryptEnvelope(selfEnvelope)).resolves.toBe("private self secret");
   });
@@ -234,6 +238,9 @@ describe("Double Ratchet full protocol cycle", () => {
     const signedPreKeySig = new Uint8Array(await crypto.subtle.sign(
       { name: "ECDSA", hash: "SHA-256" }, signingKey.privateKey, signedPreKeyPub
     ));
+    const oneTimeKey = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+    const oneTimePub = new Uint8Array(await crypto.subtle.exportKey("raw", oneTimeKey.publicKey));
+    const oneTimePriv = new Uint8Array(await crypto.subtle.exportKey("pkcs8", oneTimeKey.privateKey));
 
     return {
       deviceId,
@@ -245,8 +252,13 @@ describe("Double Ratchet full protocol cycle", () => {
         publicKey: bytesToB64(signedPreKeyPub),
         privateKeyPkcs8: bytesToB64(signedPreKeyPriv),
         signature: bytesToB64(signedPreKeySig),
+        createdAt: Date.now(),
       },
-      oneTimePreKeys: [],
+      oneTimePreKeys: [{
+        preKeyId: 1001,
+        publicKey: bytesToB64(oneTimePub),
+        privateKeyPkcs8: bytesToB64(oneTimePriv),
+      }],
     };
   }
 
@@ -641,5 +653,124 @@ describe("Double Ratchet full protocol cycle", () => {
     await expect(window.e2ee.decryptEnvelope({
       ...fanout.envelopes[0], senderDeviceId: Alice.deviceId,
     })).resolves.toBe("self note");
+  });
+
+  it("binds self-whisper ciphertext to chat id", async () => {
+    await loadCryptoEngine();
+    await activateDevice(Alice);
+    const api = vi.fn(async (path) => {
+      if (path.includes("resolve-chat-devices")) {
+        return { targetDevices: [{ userId: 1, deviceId: Alice.deviceId }] };
+      }
+      if (path.includes("prekeys")) return { available: 50 };
+      return {};
+    });
+    const fanout = await window.e2ee.buildFanoutRequest(api, 100, "self note");
+    await expect(window.e2ee.decryptEnvelope({
+      ...fanout.envelopes[0],
+      senderDeviceId: Alice.deviceId,
+      _chatId: 101,
+    })).rejects.toThrow();
+  });
+
+  it("does not decrypt a ratcheted self envelope from the identity key alone", async () => {
+    await loadCryptoEngine();
+    await activateDevice(Alice);
+    const api = vi.fn(async (path) => {
+      if (path.includes("resolve-chat-devices")) {
+        return { targetDevices: [{ userId: 1, deviceId: Alice.deviceId }] };
+      }
+      if (path.includes("prekeys")) return { available: 50 };
+      return {};
+    });
+    const fanout = await window.e2ee.buildFanoutRequest(api, 100, "self note");
+    await window.e2ee.__importSessionStateForTests({});
+    await expect(window.e2ee.decryptEnvelope({
+      ...fanout.envelopes[0],
+      senderDeviceId: Alice.deviceId,
+    })).rejects.toThrow(/SESSION_STALE/);
+  });
+
+  it("refuses to start a session when the one-time pre-key pool is empty", async () => {
+    await loadCryptoEngine();
+    await activateDevice(Alice);
+    const emptyBob = { ...Bob, oneTimePreKeys: [] };
+    await expect(window.e2ee.buildFanoutRequest(makeApi(emptyBob), 100, "no otk"))
+      .rejects.toThrow(/ONE_TIME_PREKEY_EXHAUSTED/);
+  });
+
+  it("keeps an initiator session after a forged whisper fails", async () => {
+    await loadCryptoEngine();
+    await activateDevice(Alice);
+    await window.e2ee.buildFanoutRequest(makeApi(Bob), 100, "hello");
+    const before = getSessions();
+    await expect(window.e2ee.decryptEnvelope({
+      messageType: "WHISPER",
+      senderDeviceId: Bob.deviceId,
+      senderIdentityPublicKey: Bob.identity.publicKey,
+      ciphertext: "AAAA",
+      nonce: "AAAA",
+      ratchetPublicKey: "AAAA",
+      messageIndex: 0,
+      _chatId: 100,
+    })).rejects.toThrow();
+    expect(Object.keys(getSessions())).toEqual(Object.keys(before));
+  });
+
+  it("blocks send to a newly appeared device once another device of that user is verified", async () => {
+    await loadCryptoEngine();
+    await activateDevice(Alice);
+    await window.e2ee.buildFanoutRequest(makeApi(Bob), 100, "first contact");
+    await window.e2ee.verifyRemoteIdentity(Bob.deviceId, Bob.identity.publicKey, "SAFETY_NUMBER");
+
+    const laptop = await genDevice("device-bob-laptop");
+    const api = vi.fn(async (path) => {
+      if (path.includes("resolve-chat-devices")) {
+        return {
+          targetDevices: [
+            {
+              userId: 42,
+              deviceId: Bob.deviceId,
+              identityPublicKey: Bob.identity.publicKey,
+              signingPublicKey: Bob.signingKey.publicKeySpki,
+              signedPreKey: Bob.signedPreKey,
+            },
+            {
+              userId: 42,
+              deviceId: laptop.deviceId,
+              identityPublicKey: laptop.identity.publicKey,
+              signingPublicKey: laptop.signingKey.publicKeySpki,
+              signedPreKey: laptop.signedPreKey,
+              oneTimePreKey: laptop.oneTimePreKeys[0],
+            },
+          ],
+        };
+      }
+      if (path.includes("reserve-prekey")) {
+        return { signedPreKey: laptop.signedPreKey, oneTimePreKey: laptop.oneTimePreKeys[0] };
+      }
+      if (path.includes("prekeys")) return { available: 50 };
+      return {};
+    });
+
+    await expect(window.e2ee.buildFanoutRequest(api, 100, "must not copy to laptop"))
+      .rejects.toThrow(`UNVERIFIED_DEVICE:${laptop.deviceId}`);
+  }, 30000);
+
+  it("keeps verified identities across backup restore", async () => {
+    await loadCryptoEngine();
+    await activateDevice(Alice);
+    await window.e2ee.verifyRemoteIdentity(Bob.deviceId, Bob.identity.publicKey, "SAFETY_NUMBER");
+    await window.e2ee.importLocalDeviceBundle(Alice);
+    expect(window.e2ee.getRemoteIdentityTrust(Bob.deviceId, Bob.identity.publicKey).trustState)
+      .toBe("VERIFIED");
+  });
+
+  it("blocks send and decrypt after an explicit block", async () => {
+    await loadCryptoEngine();
+    await activateDevice(Alice);
+    await window.e2ee.blockRemoteIdentity(Bob.deviceId, Bob.identity.publicKey);
+    await expect(window.e2ee.buildFanoutRequest(makeApi(Bob), 100, "nope"))
+      .rejects.toThrow(`IDENTITY_BLOCKED:${Bob.deviceId}`);
   });
 });

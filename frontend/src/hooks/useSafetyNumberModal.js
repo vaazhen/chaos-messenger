@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { api } from "../api";
 import { getE2ee } from "../e2ee";
-import { computeSafetyNumber, formatSafetyNumber } from "../safety-number";
+import { computeSafetyNumber, computeContactSafetyNumber, formatSafetyNumber } from "../safety-number";
 
 export function useSafetyNumberModal({ activeChat, meId, l }) {
   const [safetyModal, setSafetyModal] = useState({
@@ -43,11 +43,17 @@ export function useSafetyNumberModal({ activeChat, meId, l }) {
           trustState: trust.trustState || "UNVERIFIED"
         };
       }));
+      const contactFingerprint = await computeContactSafetyNumber(
+        ownIdentityKey,
+        remoteDevices.map(device => device.identityPublicKey)
+      );
 
       setSafetyModal({
         open: true,
         devices,
         selectedDeviceId: devices[0].deviceId,
+        contactFingerprint,
+        contactDisplay: formatSafetyNumber(contactFingerprint),
         error: null
       });
     } catch (error) {
@@ -76,5 +82,17 @@ export function useSafetyNumberModal({ activeChat, meId, l }) {
     setSafetyModal({ open: false, devices: [], selectedDeviceId: null, error: null });
   }, []);
 
-  return { safetyModal, setSafetyModal, openSafetyNumber, verifySafetyDevice, closeSafetyNumber };
+  const blockSafetyDevice = useCallback(async (deviceId) => {
+    const target = safetyModal.devices.find(device => device.deviceId === deviceId);
+    if (!target) return;
+    await getE2ee().blockRemoteIdentity(target.deviceId, target.identityPublicKey);
+    setSafetyModal(current => ({
+      ...current,
+      devices: current.devices.map(device =>
+        device.deviceId === deviceId ? { ...device, trustState: "BLOCKED" } : device
+      )
+    }));
+  }, [safetyModal.devices]);
+
+  return { safetyModal, setSafetyModal, openSafetyNumber, verifySafetyDevice, blockSafetyDevice, closeSafetyNumber };
 }
