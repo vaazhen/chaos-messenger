@@ -45,7 +45,11 @@ export function useSafetyNumberModal({ activeChat, meId, l }) {
       }));
       const contactFingerprint = await computeContactSafetyNumber(
         ownIdentityKey,
-        remoteDevices.map(device => device.identityPublicKey)
+        remoteDevices.map(device => device.identityPublicKey),
+        [
+          ownBundle?.signingKey?.publicKeySpki,
+          ...remoteDevices.map(device => device.signingPublicKey),
+        ].filter(Boolean)
       );
 
       setSafetyModal({

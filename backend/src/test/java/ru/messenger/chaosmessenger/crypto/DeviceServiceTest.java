@@ -70,6 +70,8 @@ class DeviceServiceTest {
     void setUp() {
         alice = TestFixtures.user(1L, "alice");
         bob = TestFixtures.user(2L, "bob");
+        lenient().when(oneTimePreKeyRepository.findByDeviceIdAndPreKeyId(anyLong(), any()))
+                .thenReturn(Optional.empty());
     }
 
     @Nested
@@ -117,7 +119,7 @@ class DeviceServiceTest {
             assertThat(signed.getPublicKey()).isEqualTo(request.signedPreKey().publicKey());
             assertThat(signed.getSignature()).isEqualTo(request.signedPreKey().signature());
 
-            verify(oneTimePreKeyRepository).deleteByDeviceId(10L);
+            verify(oneTimePreKeyRepository).deleteByDeviceIdAndUsedAtIsNull(10L);
             verify(oneTimePreKeyRepository).flush();
 
             ArgumentCaptor<Iterable> otpCaptor = ArgumentCaptor.forClass(Iterable.class);

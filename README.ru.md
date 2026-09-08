@@ -265,7 +265,7 @@ CI проверяет backend и frontend, гоняет CodeQL, публикуе
 
 ## Roadmap
 
-1. Crypto-движок — strict TypeScript-модуль; hex-векторы AAD v2 в [docs/protocol.md](docs/protocol.md)  
+1. Crypto-движок — strict TypeScript-модуль; hex-векторы AAD v3 в [docs/protocol.md](docs/protocol.md)  
 2. Production object storage для ciphertext  
 3. Production TURN, устойчивый call state, групповые звонки  
 4. Внешний pentest и криптоаудит  

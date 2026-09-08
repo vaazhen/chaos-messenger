@@ -190,31 +190,18 @@ describe("crypto-engine frontend safety checks", () => {
     await expect(window.e2ee.decryptEnvelope(envelope)).resolves.toBe("timeline self");
   });
 
-  it("does not decrypt self envelopes derived from public identity material", async () => {
+  it("rejects a self envelope without a ratchet public key", async () => {
     await loadCryptoEngine();
     const bundle = testBundle();
     await activateDevice(bundle);
 
-    const raw = Uint8Array.from(atob(bundle.identity.publicKey), (c) => c.charCodeAt(0));
-    const hkdfKey = await crypto.subtle.importKey("raw", raw, { name: "HKDF" }, false, ["deriveBits"]);
-    const bits = await crypto.subtle.deriveBits(
-      { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(32), info: new TextEncoder().encode("ChaosMessengerSelf") },
-      hkdfKey,
-      256
-    );
-    const key = await crypto.subtle.importKey("raw", bits, { name: "AES-GCM" }, false, ["encrypt"]);
-    const nonce = crypto.getRandomValues(new Uint8Array(12));
-    const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: nonce },
-      key,
-      new TextEncoder().encode("legacy secret")
-    ));
-
     await expect(window.e2ee.decryptEnvelope({
       messageType: "SELF_WHISPER",
-      ciphertext: bytesToB64(ciphertext),
-      nonce: bytesToB64(nonce),
-    })).rejects.toThrow();
+      senderDeviceId: bundle.deviceId,
+      ciphertext: "AAAA",
+      nonce: "AAAA",
+      _chatId: 100,
+    })).rejects.toThrow("SELF_WHISPER requires a ratchet session");
   });
 });
 

@@ -11,7 +11,7 @@ Contract text: `docs/protocol.md`. Tests pin vectors and a few negative paths.
 
 ## Scope an auditor should treat as in
 
-- Envelope AAD v2 binding with a single decrypt AAD (no `chatId: 0` / empty fallbacks).
+- Envelope AAD v3 binding with a single decrypt AAD (no empty / static-key fallbacks).
 - OTK reserve-on-server vs consume-on-client; empty pool fails closed.
 - PREKEY and WHISPER replay, skipped-key bounds, concurrent send indexes.
 - Identity substitution vs Safety Number (TOFU); new device beside a verified one.

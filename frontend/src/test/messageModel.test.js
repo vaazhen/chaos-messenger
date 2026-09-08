@@ -163,6 +163,12 @@ describe("reactions and envelope helpers", () => {
       senderDeviceId: "device-b",
       _chatId: 42,
     });
+    expect(envelopeForDecrypt({ ciphertext: "x" }, "device-b", 42, 9)).toEqual({
+      ciphertext: "x",
+      senderDeviceId: "device-b",
+      _chatId: 42,
+      _senderUserId: 9,
+    });
   });
 
   it("compacts a reply to the fields the wire format keeps", () => {

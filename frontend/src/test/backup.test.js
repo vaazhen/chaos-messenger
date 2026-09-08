@@ -15,15 +15,14 @@ const mockCrypto = {
       for (let i = 0; i < 64; i++) view[i] = i;
       return Promise.resolve(buf);
     }),
-    decrypt: vi.fn(() => {
+        decrypt: vi.fn(() => {
       const plaintext = JSON.stringify({
-        version: 1,
+        version: 2,
         deviceId: 'test-device',
         registrationId: '42',
         identityKeyPair: JSON.stringify({ publicKey: 'id-pub', privateKeyPkcs8: 'id-priv' }),
         signingKeyPair: JSON.stringify({ publicKeySpki: 'sig-pub', privateKeyPkcs8: 'sig-priv' }),
-        signedPreKey: JSON.stringify({ preKeyId: 1, publicKey: 'spk-pub', privateKeyPkcs8: 'spk-priv', signature: 'spk-sig' }),
-        oneTimePreKeys: JSON.stringify([{ preKeyId: 1000, publicKey: 'otp-pub', privateKeyPkcs8: 'otp-priv' }]),
+        consumedPreKeyIds: JSON.stringify([1001]),
       });
       return Promise.resolve(new TextEncoder().encode(plaintext));
     }),
@@ -91,7 +90,7 @@ describe('decryptBackup', () => {
       Buffer.from('iv1234567890').toString('base64'),
       'test-passphrase'
     );
-    expect(result).toEqual(expect.objectContaining({ version: 1, deviceId: 'test-device' }));
+    expect(result).toEqual(expect.objectContaining({ version: 2, deviceId: 'test-device' }));
     expect(mockCrypto.subtle.decrypt).toHaveBeenCalled();
   });
 
@@ -109,7 +108,7 @@ describe('decryptBackup', () => {
 });
 
 describe('restoreKeysFromBackup', () => {
-  it('imports a complete bundle through secure storage and leaves no private keys in localStorage', async () => {
+  it('imports identity material through secure storage and regenerates pre-keys', async () => {
     const importLocalDeviceBundle = vi.fn().mockResolvedValue('restored-device');
     window.e2ee = { importLocalDeviceBundle };
     const mod = await import('../backup');
@@ -120,6 +119,7 @@ describe('restoreKeysFromBackup', () => {
       signingKeyPair: JSON.stringify({ publicKeySpki: 'sig-pub', privateKeyPkcs8: 'sig-priv' }),
       signedPreKey: JSON.stringify({ preKeyId: 1, publicKey: 'spk-pub', privateKeyPkcs8: 'spk-priv', signature: 'spk-sig' }),
       oneTimePreKeys: JSON.stringify([{ preKeyId: 1000, publicKey: 'otp-pub', privateKeyPkcs8: 'otp-priv' }]),
+      consumedPreKeyIds: JSON.stringify([1000]),
     };
 
     await expect(mod.restoreKeysFromBackup(backupData)).resolves.toEqual({
@@ -132,12 +132,22 @@ describe('restoreKeysFromBackup', () => {
       registrationId: 99,
       identity: { publicKey: 'id-pub', privateKeyPkcs8: 'id-priv' },
       signingKey: { publicKeySpki: 'sig-pub', privateKeyPkcs8: 'sig-priv' },
-      signedPreKey: { preKeyId: 1, publicKey: 'spk-pub', privateKeyPkcs8: 'spk-priv', signature: 'spk-sig' },
-      oneTimePreKeys: [{ preKeyId: 1000, publicKey: 'otp-pub', privateKeyPkcs8: 'otp-priv' }],
+      signedPreKey: null,
+      oneTimePreKeys: [],
+      consumedPreKeyIds: [1000],
     });
     expect(localStorage.getItem('cm_device_bundle_v2')).toBeNull();
     expect(localStorage.getItem('chaos_identityKeyPair')).toBeNull();
     expect(localStorage.getItem('chaos_backupRestored')).toBe('true');
+  });
+
+  it('rejects partial backups without a signing key', async () => {
+    window.e2ee = { importLocalDeviceBundle: vi.fn() };
+    const mod = await import('../backup');
+    await expect(mod.restoreKeysFromBackup({
+      deviceId: 'partial-device',
+      identityKeyPair: JSON.stringify({ publicKey: 'id-pub', privateKeyPkcs8: 'id-priv' }),
+    })).rejects.toThrow('Backup is missing the signing key');
   });
 
   it('rejects partial backups without an identity key pair', async () => {

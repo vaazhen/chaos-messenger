@@ -265,7 +265,7 @@ See `.env.example`, `backend/.env.example`, `frontend/.env.example`.
 
 ## Roadmap
 
-1. Crypto engine is a strict TypeScript module; AAD v2 hex vectors live in [docs/protocol.md](docs/protocol.md)  
+1. Crypto engine is a strict TypeScript module; AAD v3 hex vectors live in [docs/protocol.md](docs/protocol.md)  
 2. Production object storage for ciphertext attachments  
 3. Production TURN, hardened call state, group calls  
 4. Independent pentest and cryptographic review  

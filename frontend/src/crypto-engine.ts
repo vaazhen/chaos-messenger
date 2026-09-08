@@ -283,35 +283,6 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         return new TextDecoder().decode(plain);
     }
 
-    // ─── Self-envelope encryption (for cross-device sync) ─────────────────────
-
-    async function deriveSelfEnvelopeKey(localBundle: DeviceBundle): Promise<CryptoKey> {
-        assertWebCryptoAvailable();
-        if (!localBundle?.identity?.privateKeyPkcs8) {
-            throw new Error('Local private identity key is missing');
-        }
-        const raw = b64ToBytes(localBundle.identity.privateKeyPkcs8);
-        const seed = new Uint8Array(await crypto.subtle.digest('SHA-256', cryptoSource(raw)));
-        const saltInput = new TextEncoder().encode(localBundle.deviceId || 'unknown-device');
-        const salt = new Uint8Array(await crypto.subtle.digest('SHA-256', saltInput));
-        const hkdfKey = await crypto.subtle.importKey('raw', cryptoSource(seed), { name: 'HKDF' }, false, ['deriveBits']);
-        const bits = await crypto.subtle.deriveBits(
-            { name: 'HKDF', hash: 'SHA-256', salt: cryptoSource(salt), info: new TextEncoder().encode('ChaosMessengerSelf:v2') },
-            hkdfKey, 256
-        );
-        return crypto.subtle.importKey('raw', bits, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-    }
-
-    async function encryptSelfEnvelope(localBundle: DeviceBundle, plainText: string) {
-        const key = await deriveSelfEnvelopeKey(localBundle);
-        return aesEncryptWithKey(plainText, key);
-    }
-
-    async function decryptSelfEnvelope(localBundle: DeviceBundle, envelope: { ciphertext: string; nonce: string }): Promise<string> {
-        const key = await deriveSelfEnvelopeKey(localBundle);
-        return aesDecryptWithKey(envelope.ciphertext, envelope.nonce, key);
-    }
-
     // ─── Secure storage ───────────────────────────────────────────────────────
 
     const DEVICE_RECORD = 'device-bundle-v1';
@@ -415,7 +386,20 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
             throw new Error('Backup does not contain a valid device identity');
         }
         localStorage.setItem(DEVICE_ID_KEY_PREFIX, bundle.deviceId);
-        localDeviceBundle = structuredClone(bundle);
+        const nextBundle = structuredClone(bundle);
+        nextBundle.consumedPreKeyIds = [...new Set((nextBundle.consumedPreKeyIds || []).map(Number).filter(Number.isFinite))];
+        if (!nextBundle.signingKey?.privateKeyPkcs8) {
+            throw new Error('Backup does not contain a signing key');
+        }
+        if (!nextBundle.signedPreKey?.privateKeyPkcs8) {
+            nextBundle.signedPreKey = await createSignedPreKeyRecord(nextBundle.signingKey.privateKeyPkcs8, 1);
+            const offsetBytes = crypto.getRandomValues(new Uint8Array(3));
+            const startAt = 100000 + (((offsetBytes[0] ?? 0) << 16) | ((offsetBytes[1] ?? 0) << 8) | (offsetBytes[2] ?? 0));
+            nextBundle.oneTimePreKeys = await generateOneTimePreKeys(PREKEY_TARGET_COUNT, startAt);
+        } else {
+            nextBundle.oneTimePreKeys = nextBundle.oneTimePreKeys || [];
+        }
+        localDeviceBundle = nextBundle;
         sessionState = {};
         await Promise.all([
             writeSecureRecord(DEVICE_RECORD, localDeviceBundle),
@@ -454,6 +438,9 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         if ((nextBundle.oneTimePreKeys?.length || 0) === before) {
             throw new Error('One-time prekey was already consumed: ' + consumedPreKeyId);
         }
+        const consumed = new Set((nextBundle.consumedPreKeyIds || []).map(Number));
+        consumed.add(Number(consumedPreKeyId));
+        nextBundle.consumedPreKeyIds = [...consumed];
 
         const nextSessions = loadSessions();
         nextSessions[sessionKey(nextBundle.deviceId, remoteDeviceId)] = structuredClone(session);
@@ -495,7 +482,11 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         return `device:${remoteDeviceId}`;
     }
 
-    async function observeRemoteIdentity(remoteDeviceId: string, identityPublicKey: string): Promise<TrustState> {
+    async function observeRemoteIdentity(
+        remoteDeviceId: string,
+        identityPublicKey: string,
+        userId: number | null = null
+    ): Promise<TrustState> {
         if (!remoteDeviceId || !identityPublicKey) return 'UNVERIFIED';
         const key = trustKey(remoteDeviceId);
         const current = identityTrustState[key];
@@ -504,10 +495,19 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
                 identityPublicKey,
                 trustState: 'UNVERIFIED',
                 firstSeenAt: Date.now(),
-                lastSeenAt: Date.now()
+                lastSeenAt: Date.now(),
+                ...(userId != null ? { userId } : {})
             };
             await writeSecureRecord(TRUST_RECORD, identityTrustState);
             return 'UNVERIFIED';
+        }
+        if (userId != null && current.userId != null && Number(current.userId) !== Number(userId)) {
+            current.lastSeenAt = Date.now();
+            await writeSecureRecord(TRUST_RECORD, identityTrustState);
+            throw new Error('UNVERIFIED_DEVICE:' + remoteDeviceId);
+        }
+        if (userId != null && current.userId == null) {
+            current.userId = userId;
         }
         if (current.trustState === 'BLOCKED') {
             if (current.identityPublicKey !== identityPublicKey) {
@@ -538,13 +538,15 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         method: VerificationMethod = 'MANUAL'
     ): Promise<void> {
         if (!remoteDeviceId || !identityPublicKey) throw new Error('Remote device identity is required');
+        const previous = identityTrustState[trustKey(remoteDeviceId)];
         identityTrustState[trustKey(remoteDeviceId)] = {
             identityPublicKey,
             trustState: 'VERIFIED',
             verificationMethod: method,
             verifiedAt: Date.now(),
-            firstSeenAt: identityTrustState[trustKey(remoteDeviceId)]?.firstSeenAt || Date.now(),
-            lastSeenAt: Date.now()
+            firstSeenAt: previous?.firstSeenAt || Date.now(),
+            lastSeenAt: Date.now(),
+            ...(previous?.userId != null ? { userId: previous.userId } : {})
         };
         await writeSecureRecord(TRUST_RECORD, identityTrustState);
     }
@@ -558,7 +560,8 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
             firstSeenAt: previous?.firstSeenAt || Date.now(),
             lastSeenAt: Date.now(),
             changedAt: Date.now(),
-            ...(previous?.identityPublicKey ? { previousIdentityPublicKey: previous.identityPublicKey } : {})
+            ...(previous?.identityPublicKey ? { previousIdentityPublicKey: previous.identityPublicKey } : {}),
+            ...(previous?.userId != null ? { userId: previous.userId } : {})
         };
         await writeSecureRecord(TRUST_RECORD, identityTrustState);
     }
@@ -668,7 +671,8 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
             identity: { publicKey: identityPublic, privateKeyPkcs8: identityPrivate },
             signingKey: { publicKeySpki: signingPublicKey, privateKeyPkcs8: signingPrivateKeyPkcs8 },
             signedPreKey: signedPreKeyRecord,
-            oneTimePreKeys
+            oneTimePreKeys,
+            consumedPreKeyIds: []
         };
     }
 
@@ -926,6 +930,10 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         if (envelope.oneTimePreKeyId == null) {
             throw new Error('One-time prekey is required to establish a session');
         }
+        const consumed = new Set((localBundle.consumedPreKeyIds || []).map(Number));
+        if (consumed.has(Number(envelope.oneTimePreKeyId))) {
+            throw new Error('One-time prekey was already consumed: ' + envelope.oneTimePreKeyId);
+        }
         const oneTime = localBundle.oneTimePreKeys.find(k => k.preKeyId === envelope.oneTimePreKeyId);
         if (!oneTime) throw new Error('One-time prekey not found locally: ' + envelope.oneTimePreKeyId);
         const oneTimePrivate = await importPkcs8PrivateKey(oneTime.privateKeyPkcs8);
@@ -978,6 +986,8 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
             chatId: envelope._chatId,
             messageIndex: envelope.messageIndex ?? 0,
             previousChainLength: envelope.previousChainLength ?? 0,
+            senderDeviceId: envelope.senderDeviceId || localDeviceBundle?.deviceId,
+            targetDeviceId: localDeviceBundle?.deviceId,
             ratchetPublicKey: envelope.ratchetPublicKey
         });
         return aesDecryptWithKey(ciphertext, nonce, aesKey, aad);
@@ -1066,6 +1076,8 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
             chatId: aadContext.chatId,
             messageIndex,
             previousChainLength: session.PN || 0,
+            senderDeviceId: aadContext.senderDeviceId,
+            targetDeviceId: aadContext.targetDeviceId,
             ratchetPublicKey: session.DHs.publicKey
         });
         const encrypted = await aesEncryptWithKey(plainText, mk, aad);
@@ -1110,27 +1122,36 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         return session;
     }
 
+    async function reseedSelfSession(session: RatchetSession): Promise<void> {
+        const DHs = await generateX25519KeyPair();
+        const DHsExported = await exportDHKeyPair(DHs);
+        const chain = crypto.getRandomValues(new Uint8Array(32));
+        const root = crypto.getRandomValues(new Uint8Array(32));
+        session.RK = bytesToB64(root);
+        session.DHs = DHsExported;
+        session.DHr = DHsExported.publicKey;
+        session.CKs = bytesToB64(chain);
+        session.CKr = bytesToB64(chain);
+        session.Ns = 0;
+        session.Nr = 0;
+        session.PN = 0;
+        session.MKSKIPPED = {};
+        session.establishedAt = Date.now();
+    }
+
     function assertNoUnverifiedSiblingDevices(targets: Map<string, TargetDevice>, localDeviceId: string): void {
         const remotes = [...targets.values()].filter(
             device => device.deviceId !== localDeviceId && device.identityPublicKey
         );
-        const byUser = new Map<number, TargetDevice[]>();
-        for (const device of remotes) {
-            const list = byUser.get(device.userId) || [];
-            list.push(device);
-            byUser.set(device.userId, list);
-        }
-        for (const devices of byUser.values()) {
-            const hasVerified = devices.some(device =>
-                getRemoteIdentityTrust(device.deviceId, device.identityPublicKey).trustState === 'VERIFIED'
-            );
-            if (!hasVerified) continue;
-            const extra = devices.find(device =>
-                getRemoteIdentityTrust(device.deviceId, device.identityPublicKey).trustState === 'UNVERIFIED'
-            );
-            if (extra) {
-                throw new Error('UNVERIFIED_DEVICE:' + extra.deviceId);
-            }
+        const hasVerified = remotes.some(device =>
+            getRemoteIdentityTrust(device.deviceId, device.identityPublicKey).trustState === 'VERIFIED'
+        );
+        if (!hasVerified) return;
+        const extra = remotes.find(device =>
+            getRemoteIdentityTrust(device.deviceId, device.identityPublicKey).trustState === 'UNVERIFIED'
+        );
+        if (extra) {
+            throw new Error('UNVERIFIED_DEVICE:' + extra.deviceId);
         }
     }
 
@@ -1207,7 +1228,11 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
 
         for (const targetDevice of uniqueTargets.values()) {
             if (targetDevice.deviceId !== localBundle.deviceId && targetDevice.identityPublicKey) {
-                const trustState = await observeRemoteIdentity(targetDevice.deviceId, targetDevice.identityPublicKey);
+                const trustState = await observeRemoteIdentity(
+                    targetDevice.deviceId,
+                    targetDevice.identityPublicKey,
+                    targetDevice.userId
+                );
                 if (trustState === 'KEY_CHANGED') {
                     throw new Error('IDENTITY_KEY_CHANGED:' + targetDevice.deviceId);
                 }
@@ -1224,13 +1249,16 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
                 const { encrypted, messageIndex, ratchetPublicKey, previousChainLength } =
                     await encryptWithDoubleRatchet(session, plainText, {
                         messageType: 'SELF_WHISPER',
-                        chatId
+                        chatId,
+                        senderDeviceId: localBundle.deviceId,
+                        targetDeviceId: localBundle.deviceId
                     });
                 await storeSession(localBundle.deviceId, localBundle.deviceId, session);
                 envelopes.push({
                     targetDeviceId: targetDevice.deviceId,
                     targetUserId: targetDevice.userId,
                     messageType: 'SELF_WHISPER',
+                    senderDeviceId: localBundle.deviceId,
                     senderIdentityPublicKey: localBundle.identity.publicKey,
                     ephemeralPublicKey: null,
                     ratchetPublicKey,
@@ -1275,7 +1303,9 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
             const { encrypted, messageIndex, ratchetPublicKey, previousChainLength } =
                 await encryptWithDoubleRatchet(session, plainText, {
                     messageType: isNewSession ? 'PREKEY_WHISPER' : 'WHISPER',
-                    chatId
+                    chatId,
+                    senderDeviceId: localBundle.deviceId,
+                    targetDeviceId: targetDevice.deviceId
                 });
             await storeSession(localBundle.deviceId, targetDevice.deviceId, session);
 
@@ -1283,6 +1313,7 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
                 targetDeviceId: targetDevice.deviceId,
                 targetUserId: targetDevice.userId,
                 messageType: isNewSession ? 'PREKEY_WHISPER' : 'WHISPER',
+                senderDeviceId: localBundle.deviceId,
                 senderIdentityPublicKey: localBundle.identity.publicKey,
                 ephemeralPublicKey: isNewSession ? ephemeralPublicKey : null,
                 ratchetPublicKey,
@@ -1327,7 +1358,11 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         log('[decrypt] senderDeviceId=' + envelope.senderDeviceId + ' messageType=' + envelope.messageType + ' messageIndex=' + envelope.messageIndex);
 
         if (envelope.messageType !== 'SELF_WHISPER' && envelope.senderIdentityPublicKey) {
-            const trustState = await observeRemoteIdentity(envelope.senderDeviceId, envelope.senderIdentityPublicKey);
+            const trustState = await observeRemoteIdentity(
+                envelope.senderDeviceId,
+                envelope.senderIdentityPublicKey,
+                envelope._senderUserId ?? null
+            );
             if (trustState === 'KEY_CHANGED') {
                 throw new Error('IDENTITY_KEY_CHANGED:' + envelope.senderDeviceId);
             }
@@ -1337,14 +1372,17 @@ async function createCryptoEngine(): Promise<CryptoEngine> {
         }
 
         if (envelope.messageType === 'SELF_WHISPER') {
-            if (envelope.ratchetPublicKey) {
-                const session = getSession(localBundle.deviceId, localBundle.deviceId);
-                if (!session) throw new Error('SESSION_STALE:' + (envelope.senderDeviceId || localBundle.deviceId));
-                const plainText = await decryptWithDoubleRatchet(session, envelope);
-                await storeSession(localBundle.deviceId, localBundle.deviceId, session);
-                return plainText;
+            if (!envelope.ratchetPublicKey) {
+                throw new Error('SELF_WHISPER requires a ratchet session');
             }
-            return decryptSelfEnvelope(localBundle, envelope);
+            const session = getSession(localBundle.deviceId, localBundle.deviceId);
+            if (!session) throw new Error('SESSION_STALE:' + (envelope.senderDeviceId || localBundle.deviceId));
+            const plainText = await decryptWithDoubleRatchet(session, envelope);
+            if (session.Ns === session.Nr && session.Ns > 0) {
+                await reseedSelfSession(session);
+            }
+            await storeSession(localBundle.deviceId, localBundle.deviceId, session);
+            return plainText;
         }
 
         let session = getSession(localBundle.deviceId, envelope.senderDeviceId);

@@ -70,4 +70,15 @@ class CredentialRateLimiterTest {
                 key -> key.startsWith("auth:login:rate:") && !key.contains("alice@example.com")
         ));
     }
+
+    @Test
+    void prekeyTargetLimitIsTighterThanGenericUserAction() {
+        RedisTemplate<String, String> redis = mock(RedisTemplate.class);
+        when(redis.execute(any(), anyList(), anyString())).thenReturn(5L);
+        CredentialRateLimiter limiter = new CredentialRateLimiter(redis);
+
+        assertThatThrownBy(() -> limiter.checkPrekeyReserve("alice", "device-bob"))
+                .isInstanceOf(RateLimitException.class)
+                .hasMessageContaining("pre-key");
+    }
 }

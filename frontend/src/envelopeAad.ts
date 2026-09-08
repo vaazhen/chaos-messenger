@@ -1,6 +1,6 @@
 import type { AADContext } from "./types/protocol";
 
-export const ENVELOPE_AAD_VERSION = 0x02;
+export const ENVELOPE_AAD_VERSION = 0x03;
 
 function typeCode(messageType: string | undefined): number {
   if (messageType === "PREKEY_WHISPER") return 1;
@@ -9,12 +9,26 @@ function typeCode(messageType: string | undefined): number {
   return 0;
 }
 
-/** AES-GCM AAD v2: version, type, chat id, index, previous chain length, optional ratchet key. */
+function appendLatin1(base: ArrayBuffer, text: string): ArrayBuffer {
+  const value = String(text || "");
+  const ext = new ArrayBuffer(base.byteLength + 4 + value.length);
+  new Uint8Array(ext).set(new Uint8Array(base), 0);
+  const view = new DataView(ext);
+  view.setUint32(base.byteLength, value.length, false);
+  for (let i = 0; i < value.length; i++) {
+    view.setUint8(base.byteLength + 4 + i, value.charCodeAt(i));
+  }
+  return ext;
+}
+
+/** AES-GCM AAD v3: version, type, chat id, index, previous chain length, sender, target, optional ratchet key. */
 export function buildEnvelopeAAD({
   messageType,
   chatId,
   messageIndex,
   previousChainLength,
+  senderDeviceId,
+  targetDeviceId,
   ratchetPublicKey,
 }: AADContext): ArrayBuffer {
   const cid = BigInt(chatId != null ? chatId : 0);
@@ -29,18 +43,12 @@ export function buildEnvelopeAAD({
   dv.setUint32(10, idx, false);
   dv.setUint32(14, pcl, false);
 
+  let body = appendLatin1(buf, senderDeviceId || "");
+  body = appendLatin1(body, targetDeviceId || "");
   if (ratchetPublicKey) {
-    const rpk = String(ratchetPublicKey);
-    const ext = new ArrayBuffer(buf.byteLength + 4 + rpk.length);
-    new Uint8Array(ext).set(new Uint8Array(buf), 0);
-    const edv = new DataView(ext);
-    edv.setUint32(buf.byteLength, rpk.length, false);
-    for (let i = 0; i < rpk.length; i++) {
-      edv.setUint8(buf.byteLength + 4 + i, rpk.charCodeAt(i));
-    }
-    return ext;
+    body = appendLatin1(body, String(ratchetPublicKey));
   }
-  return buf;
+  return body;
 }
 
 export function envelopeAadHex(context: AADContext): string {
